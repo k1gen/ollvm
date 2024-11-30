@@ -1,4 +1,6 @@
 add_library(LLVMObfuscationx SHARED 
+    ConstantFPEncryption.cpp
+    ConstantIntEncryption.cpp
     CryptoUtils.cpp
     Utils.cpp
     ObfuscationPassManager.cpp

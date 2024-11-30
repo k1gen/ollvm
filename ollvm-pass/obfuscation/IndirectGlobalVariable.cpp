@@ -6,6 +6,9 @@
 #include "include/Utils.h"
 #include "include/CryptoUtils.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
+#include "llvm/IR/Module.h"
+
+#include <random>
 
 #define DEBUG_TYPE "indgv"
 
@@ -14,22 +17,15 @@ namespace {
 struct IndirectGlobalVariable : public FunctionPass {
   unsigned pointerSize;
   static char ID;
-  bool flag;
   
-  ObfuscationOptions *Options;
+  ObfuscationOptions *ArgsOptions;
   std::map<GlobalVariable *, unsigned> GVNumbering;
   std::vector<GlobalVariable *> GlobalVariables;
   CryptoUtils RandomEngine;
-  IndirectGlobalVariable(unsigned pointerSize) : FunctionPass(ID) {
-    this->pointerSize = pointerSize;
-    this->flag = false;
-    this->Options = nullptr;
-  }
 
-  IndirectGlobalVariable(unsigned pointerSize, bool flag, ObfuscationOptions *Options) : FunctionPass(ID) {
+  IndirectGlobalVariable(unsigned pointerSize, ObfuscationOptions *argsOptions) : FunctionPass(ID) {
     this->pointerSize = pointerSize;
-    this->flag = flag;
-    this->Options = Options;
+    this->ArgsOptions = argsOptions;
   }
 
   StringRef getPassName() const override { return {"IndirectGlobalVariable"}; }
@@ -41,15 +37,23 @@ struct IndirectGlobalVariable : public FunctionPass {
         if (GlobalVariable *GV = dyn_cast<GlobalVariable>(val)) {
           if (!GV->isThreadLocal() && GVNumbering.count(GV) == 0 &&
               !GV->isDLLImportDependent()) {
-            GVNumbering[GV] = GlobalVariables.size();
+            GVNumbering[GV] = 0;
             GlobalVariables.push_back((GlobalVariable *) val);
           }
         }
       }
     }
+
+    long seed = RandomEngine.get_uint32_t();
+    std::default_random_engine e(seed);
+    std::shuffle(GlobalVariables.begin(), GlobalVariables.end(), e);
+    unsigned N = 0;
+    for (auto GV:GlobalVariables) {
+      GVNumbering[GV] = N++;
+    }
   }
 
-  GlobalVariable *getIndirectGlobalVariables(Function &F, ConstantInt *EncKey) {
+  GlobalVariable *getIndirectGlobalVariables0(Function &F, ConstantInt *EncKey) const {
     std::string GVName(F.getName().str() + "_IndirectGVars");
     GlobalVariable *GV = F.getParent()->getNamedGlobal(GVName);
     if (GV)
@@ -72,12 +76,106 @@ struct IndirectGlobalVariable : public FunctionPass {
     return GV;
   }
 
-  bool runOnFunction(Function &Fn) override {
-    if (!toObfuscate(flag, &Fn, "indgv")) {
-      return false;
+  GlobalVariable *getIndirectGlobalVariables1(Function &F, ConstantInt *AddKey, ConstantInt *XorKey) const {
+    std::string GVName(F.getName().str() + "_IndirectGVars1");
+    GlobalVariable *GV = F.getParent()->getNamedGlobal(GVName);
+    if (GV)
+      return GV;
+
+    std::vector<Constant *> Elements;
+    for (auto GVar:GlobalVariables) {
+      Constant *CE = ConstantExpr::getBitCast(
+        GVar, PointerType::getUnqual(F.getContext()));
+      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, ConstantExpr::getXor(AddKey, XorKey));
+      Elements.push_back(CE);
     }
 
-    if (Options && Options->skipFunction(Fn.getName())) {
+    ArrayType *ATy =
+      ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
+    Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
+    GV = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
+      CA, GVName);
+    appendToCompilerUsed(*F.getParent(), {GV});
+    return GV;
+  }
+
+  GlobalVariable *getIndirectGlobalVariables2(Function &F, ConstantInt *AddKey, ConstantInt *XorKey) {
+    std::string GVName(F.getName().str() + "_IndirectGVars2");
+    GlobalVariable *GV = F.getParent()->getNamedGlobal(GVName);
+    if (GV)
+      return GV;
+
+    auto& Ctx = F.getContext();
+    IntegerType *intType = Type::getInt32Ty(Ctx);
+    if (pointerSize == 8) {
+      intType = Type::getInt64Ty(Ctx);
+    }
+
+    std::vector<Constant *> Elements;
+    for (auto GVar:GlobalVariables) {
+      Constant *CE = ConstantExpr::getBitCast(
+        GVar, PointerType::getUnqual(F.getContext()));
+      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, ConstantExpr::getXor(AddKey, ConstantExpr::getMul(XorKey, ConstantInt::get(intType, GVNumbering[GVar], false))));
+      Elements.push_back(CE);
+    }
+
+    ArrayType *ATy =
+      ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
+    Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
+    GV = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
+      CA, GVName);
+    appendToCompilerUsed(*F.getParent(), {GV});
+    return GV;
+  }
+
+  std::pair<GlobalVariable *, GlobalVariable *> getIndirectGlobalVariables3(Function &F, ConstantInt *AddKey) {
+    std::string GVNameAdd(F.getName().str() + "_IndirectGVars3");
+    std::string GVNameXor(F.getName().str() + "_IndirectGVars3Xor");
+    GlobalVariable *GVAdd = F.getParent()->getNamedGlobal(GVNameAdd);
+    GlobalVariable *GVXor = F.getParent()->getNamedGlobal(GVNameXor);
+    if (GVAdd && GVXor)
+      return std::make_pair(GVAdd, GVXor);
+
+    auto& Ctx = F.getContext();
+    IntegerType *intType = Type::getInt32Ty(Ctx);
+    if (pointerSize == 8) {
+      intType = Type::getInt64Ty(Ctx);
+    }
+
+    std::vector<Constant *> Elements;
+    std::vector<Constant *> XorKeys;
+    for (auto GVar:GlobalVariables) {
+      uint64_t V = RandomEngine.get_uint64_t();
+      Constant *XorKey = ConstantInt::get(intType, V, false);
+
+      Constant *CE = ConstantExpr::getBitCast(
+        GVar, PointerType::getUnqual(F.getContext()));
+      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, ConstantExpr::getXor(AddKey, ConstantExpr::getMul(XorKey, ConstantInt::get(intType, GVNumbering[GVar], false))));
+      Elements.push_back(CE);
+
+      XorKey = ConstantExpr::getNeg(XorKey);
+      XorKey = ConstantExpr::getXor(XorKey, AddKey);
+      XorKey = ConstantExpr::getNeg(XorKey);
+      XorKeys.push_back(XorKey);
+    }
+
+    ArrayType *ATy =
+      ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
+    Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
+    GVAdd = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
+      CA, GVNameAdd);
+    appendToCompilerUsed(*F.getParent(), {GVAdd});
+
+    ArrayType *XTy = ArrayType::get(intType, XorKeys.size());
+    Constant *CX = ConstantArray::get(XTy, XorKeys);
+    GVXor = new GlobalVariable(*F.getParent(), XTy, false, GlobalValue::LinkageTypes::PrivateLinkage, CX, GVNameXor);
+    appendToCompilerUsed(*F.getParent(), {GVXor});
+    return std::make_pair(GVAdd, GVXor);
+  }
+
+  bool runOnFunction(Function &Fn) override {
+    const auto opt = ArgsOptions->toObfuscate(ArgsOptions->indGvOpt(), &Fn);
+    if (!opt.isEnabled()) {
       return false;
     }
 
@@ -94,6 +192,7 @@ struct IndirectGlobalVariable : public FunctionPass {
     }
 
     uint64_t V = RandomEngine.get_uint64_t();
+    uint64_t XV = RandomEngine.get_uint64_t();
     IntegerType* intType = Type::getInt32Ty(Ctx);
     if (pointerSize == 8) {
       intType = Type::getInt64Ty(Ctx);
@@ -101,11 +200,29 @@ struct IndirectGlobalVariable : public FunctionPass {
 
     ConstantInt *EncKey = ConstantInt::get(intType, V, false);
     ConstantInt *EncKey1 = ConstantInt::get(intType, -V, false);
-
-    Value *MySecret = ConstantInt::get(intType, 0, true);
-
     ConstantInt *Zero = ConstantInt::get(intType, 0);
-    GlobalVariable *GVars = getIndirectGlobalVariables(Fn, EncKey1);
+
+    GlobalVariable *GXorKey = nullptr;
+    GlobalVariable *GVars = nullptr;
+    GlobalVariable *XorKeys = nullptr;
+
+    if (opt.level() == 0) {
+      GVars = getIndirectGlobalVariables0(Fn, EncKey1);
+    } else if (opt.level() == 1 || opt.level() == 2) {
+      ConstantInt *CXK = ConstantInt::get(intType, XV, false);
+      GXorKey = new GlobalVariable(*Fn.getParent(), CXK->getType(), false, GlobalValue::LinkageTypes::PrivateLinkage,
+        CXK, Fn.getName() + "_IGVXorKey");
+      appendToCompilerUsed(*Fn.getParent(), {GXorKey});
+      if (opt.level() == 1) {
+        GVars = getIndirectGlobalVariables1(Fn, EncKey1, CXK);
+      } else {
+        GVars = getIndirectGlobalVariables2(Fn, EncKey1, CXK);
+      }
+    } else {
+      auto [fst, snd] = getIndirectGlobalVariables3(Fn, EncKey1);
+      GVars = fst;
+      XorKeys = snd;
+    }
 
     for (inst_iterator I = inst_begin(Fn), E = inst_end(Fn); I != E; ++I) {
       Instruction *Inst = &*I;
@@ -135,11 +252,36 @@ struct IndirectGlobalVariable : public FunctionPass {
                 GEP->getType(), GEP,
                 GV->getName());
 
-            Value *Secret = IRB.CreateAdd(EncKey, MySecret);
+            Value *DecKey = EncKey;
+            if (GXorKey) {
+              LoadInst *XorKey = IRB.CreateLoad(GXorKey->getValueType(), GXorKey);
+
+              if (opt.level() == 1) {
+                DecKey = IRB.CreateXor(EncKey1, XorKey);
+                DecKey = IRB.CreateNeg(DecKey);
+              } else if (opt.level() == 2) {
+                DecKey = IRB.CreateXor(EncKey1, IRB.CreateMul(XorKey, Idx));
+                DecKey = IRB.CreateNeg(DecKey);
+              }
+            }
+
+            if (XorKeys) {
+              Value *XorKeysGEP = IRB.CreateGEP(XorKeys->getValueType(), XorKeys, {Zero, Idx});
+
+              Value *XorKey = IRB.CreateLoad(intType, XorKeysGEP);
+
+              XorKey = IRB.CreateNeg(XorKey);
+              XorKey = IRB.CreateXor(XorKey, EncKey1);
+              XorKey = IRB.CreateNeg(XorKey);
+
+              DecKey = IRB.CreateXor(EncKey1, IRB.CreateMul(XorKey, Idx));
+              DecKey = IRB.CreateNeg(DecKey);
+            }
+
             Value *GVAddr = IRB.CreateGEP(
               Type::getInt8Ty(Ctx),
                 EncGVAddr,
-                Secret);
+              DecKey);
             GVAddr = IRB.CreateBitCast(GVAddr, GV->getType());
             GVAddr->setName("IndGV0_");
             PHI->setIncomingValue(i, GVAddr);
@@ -163,11 +305,36 @@ struct IndirectGlobalVariable : public FunctionPass {
                 GEP,
                 GV->getName());
 
-            Value *Secret = IRB.CreateAdd(EncKey, MySecret);
+            Value *DecKey = EncKey;
+            if (GXorKey) {
+              LoadInst *XorKey = IRB.CreateLoad(GXorKey->getValueType(), GXorKey);
+
+              if (opt.level() == 1) {
+                DecKey = IRB.CreateXor(EncKey1, XorKey);
+                DecKey = IRB.CreateNeg(DecKey);
+              } else if (opt.level() == 2) {
+                DecKey = IRB.CreateXor(EncKey1, IRB.CreateMul(XorKey, Idx));
+                DecKey = IRB.CreateNeg(DecKey);
+              }
+            }
+
+            if (XorKeys) {
+              Value *XorKeysGEP = IRB.CreateGEP(XorKeys->getValueType(), XorKeys, {Zero, Idx});
+
+              Value *XorKey = IRB.CreateLoad(intType, XorKeysGEP);
+
+              XorKey = IRB.CreateNeg(XorKey);
+              XorKey = IRB.CreateXor(XorKey, EncKey1);
+              XorKey = IRB.CreateNeg(XorKey);
+
+              DecKey = IRB.CreateXor(EncKey1, IRB.CreateMul(XorKey, Idx));
+              DecKey = IRB.CreateNeg(DecKey);
+            }
+
             Value *GVAddr = IRB.CreateGEP(
               Type::getInt8Ty(Ctx),
                 EncGVAddr,
-                Secret);
+                DecKey);
             GVAddr = IRB.CreateBitCast(GVAddr, GV->getType());
             GVAddr->setName("IndGV1_");
             Inst->replaceUsesOfWith(GV, GVAddr);
@@ -183,10 +350,8 @@ struct IndirectGlobalVariable : public FunctionPass {
 } // namespace llvm
 
 char IndirectGlobalVariable::ID = 0;
-FunctionPass *llvm::createIndirectGlobalVariablePass(unsigned pointerSize) { return new IndirectGlobalVariable(pointerSize); }
-FunctionPass *llvm::createIndirectGlobalVariablePass(unsigned pointerSize, bool flag,
-                                                     ObfuscationOptions *Options) {
-  return new IndirectGlobalVariable(pointerSize, flag, Options);
+FunctionPass *llvm::createIndirectGlobalVariablePass(unsigned pointerSize, ObfuscationOptions *argsOptions) {
+  return new IndirectGlobalVariable(pointerSize, argsOptions);
 }
 
 INITIALIZE_PASS(IndirectGlobalVariable, "indgv", "Enable IR Indirect Global Variable Obfuscation", false, false)

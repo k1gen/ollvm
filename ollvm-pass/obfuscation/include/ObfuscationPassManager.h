@@ -6,6 +6,8 @@
 #include "include/IndirectCall.h"
 #include "include/IndirectGlobalVariable.h"
 #include "include/StringEncryption.h"
+#include "include/ConstantIntEncryption.h"
+#include "include/ConstantFPEncryption.h"
 #include "llvm/Passes/PassBuilder.h"
 
 // Namespace

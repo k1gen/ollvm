@@ -2,6 +2,10 @@
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/DiagnosticInfo.h"
+#include "llvm/IR/EHPersonalities.h"
+#include "llvm/IR/NoFolder.h"
 
 // Shamefully borrowed from ../Scalar/RegToMem.cpp :(
 bool valueEscapes(Instruction *Inst) {
@@ -18,9 +22,9 @@ bool valueEscapes(Instruction *Inst) {
 
 void fixStack(Function *f) {
   // Try to remove phi node and demote reg to stack
-  std::vector<PHINode *> tmpPhi;
+  std::vector<PHINode *>     tmpPhi;
   std::vector<Instruction *> tmpReg;
-  BasicBlock *bbEntry = &*f->begin();
+  BasicBlock *               bbEntry = &*f->begin();
 
   do {
     tmpPhi.clear();
@@ -43,107 +47,46 @@ void fixStack(Function *f) {
       }
     }
     for (unsigned int i = 0; i != tmpReg.size(); ++i) {
-      DemoteRegToStack(*tmpReg.at(i), f->begin()->getTerminator());
+      DemoteRegToStack(*tmpReg.at(i));
     }
 
     for (unsigned int i = 0; i != tmpPhi.size(); ++i) {
-      DemotePHIToStack(tmpPhi.at(i), f->begin()->getTerminator());
+      DemotePHIToStack(tmpPhi.at(i));
     }
 
   } while (tmpReg.size() != 0 || tmpPhi.size() != 0);
 }
 
-std::string readAnnotate(Function *f) {
-  std::string annotation = "";
-
-  // Get annotation variable
-  GlobalVariable *glob =
-      f->getParent()->getGlobalVariable("llvm.global.annotations");
-
-  if (glob != NULL) {
-    // Get the array
-    if (ConstantArray *ca = dyn_cast<ConstantArray>(glob->getInitializer())) {
-      for (unsigned i = 0; i < ca->getNumOperands(); ++i) {
-        // Get the struct
-        if (ConstantStruct *structAn =
-            dyn_cast<ConstantStruct>(ca->getOperand(i))) {
-          if (ConstantExpr *expr =
-              dyn_cast<ConstantExpr>(structAn->getOperand(0))) {
-            // If it's a bitcast we can check if the annotation is concerning
-            // the current function
-            if (expr->getOpcode() == Instruction::BitCast &&
-                expr->getOperand(0) == f) {
-              ConstantExpr *note = cast<ConstantExpr>(structAn->getOperand(1));
-              // If it's a GetElementPtr, that means we found the variable
-              // containing the annotations
-              if (note->getOpcode() == Instruction::GetElementPtr) {
-                if (GlobalVariable *annoteStr =
-                    dyn_cast<GlobalVariable>(note->getOperand(0))) {
-                  if (ConstantDataSequential *data =
-                      dyn_cast<ConstantDataSequential>(
-                          annoteStr->getInitializer())) {
-                    if (data->isString()) {
-                      annotation += data->getAsString().lower() + " ";
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+CallBase* fixEH(CallBase* CB) {
+  const auto BB = CB->getParent();
+  if (!BB) {
+    return CB;
   }
-  return annotation;
-}
-
-bool toObfuscate(bool flag, Function *f, std::string attribute) {
-  std::string attr = attribute;
-  std::string attrNo = "no" + attr;
-
-  // Check if declaration
-  if (f->isDeclaration()) {
-    return false;
+  const auto Fn = BB->getParent();
+  if (!Fn || !Fn->hasPersonalityFn()
+    || !isScopedEHPersonality(classifyEHPersonality(Fn->getPersonalityFn()))) {
+    return CB;
   }
-
-  // Check external linkage
-  if(f->hasAvailableExternallyLinkage() != 0) {
-    return false;
+  const auto BlockColors = colorEHFunclets(*Fn);
+  const auto BBColor = BlockColors.find(BB);
+  if (BBColor == BlockColors.end()) {
+    return CB;
   }
+  const auto& ColorVec = BBColor->getSecond();
+  assert(ColorVec.size() == 1 && "non-unique color for block!");
 
-  // We have to check the nofla flag first
-  // Because .find("fla") is true for a string like "fla" or
-  // "nofla"
-  if (readAnnotate(f).find(attrNo) != std::string::npos) {
-    return false;
+  const auto EHBlock = ColorVec.front();
+  if (!EHBlock || !EHBlock->isEHPad()) {
+    return CB;
   }
+  const auto EHPad = EHBlock->getFirstNonPHI();
 
-  // If fla annotations
-  if (readAnnotate(f).find(attr) != std::string::npos) {
-    return true;
-  }
-
-  // If fla flag is set
-  if (flag == true) {
-    /* Check if the number of applications is correct
-    if (!((Percentage > 0) && (Percentage <= 100))) {
-      LLVMContext &ctx = llvm::getGlobalContext();
-      ctx.emitError(Twine("Flattening application function\
-              percentage -perFLA=x must be 0 < x <= 100"));
-    }
-    // Check name
-    else if (func.size() != 0 && func.find(f->getName()) != std::string::npos) {
-      return true;
-    }
-
-    if ((((int)llvm::cryptoutils->get_range(100))) < Percentage) {
-      return true;
-    }
-    */
-    return true;
-  }
-
-  return false;
+  const OperandBundleDef OB("funclet", EHPad);
+  auto *NewCall = CallBase::addOperandBundle(CB, LLVMContext::OB_funclet, OB, CB);
+  NewCall->copyMetadata(*CB);
+  CB->replaceAllUsesWith(NewCall);
+  CB->eraseFromParent();
+  return NewCall;
 }
 
 void LowerConstantExpr(Function &F) {
@@ -152,7 +95,8 @@ void LowerConstantExpr(Function &F) {
   for (inst_iterator It = inst_begin(F), E = inst_end(F); It != E; ++It) {
     Instruction *I = &*It;
 
-    if (isa<LandingPadInst>(I) || isa<CatchPadInst>(I) || isa<CatchSwitchInst>(I) || isa<CatchReturnInst>(I))
+    if (isa<LandingPadInst>(I) || isa<CatchPadInst>(I) || isa<
+          CatchSwitchInst>(I) || isa<CatchReturnInst>(I))
       continue;
     if (auto *II = dyn_cast<IntrinsicInst>(I)) {
       if (II->getIntrinsicID() == Intrinsic::eh_typeid_for) {
@@ -167,14 +111,15 @@ void LowerConstantExpr(Function &F) {
   }
 
   while (!WorkList.empty()) {
-    auto It = WorkList.begin();
+    auto         It = WorkList.begin();
     Instruction *I = *It;
     WorkList.erase(*It);
 
     if (PHINode *PHI = dyn_cast<PHINode>(I)) {
       for (unsigned int i = 0; i < PHI->getNumIncomingValues(); ++i) {
         Instruction *TI = PHI->getIncomingBlock(i)->getTerminator();
-        if (ConstantExpr *CE = dyn_cast<ConstantExpr>(PHI->getIncomingValue(i))) {
+        if (ConstantExpr *CE = dyn_cast<
+          ConstantExpr>(PHI->getIncomingValue(i))) {
           Instruction *NewInst = CE->getAsInstruction();
           NewInst->insertBefore(TI);
           PHI->setIncomingValue(i, NewInst);
@@ -192,4 +137,42 @@ void LowerConstantExpr(Function &F) {
       }
     }
   }
+}
+
+bool expandConstantExpr(Function &F) {
+  bool                Changed = false;
+  LLVMContext &       Ctx = F.getContext();
+  IRBuilder<NoFolder> IRB(Ctx);
+
+  for (auto &BB : F) {
+    for (auto &I : BB) {
+      if (I.isEHPad() || isa<AllocaInst>(&I) || isa<IntrinsicInst>(&I) ||
+        isa<SwitchInst>(&I) || I.isAtomic()) {
+        continue;
+      }
+      auto CI = dyn_cast<CallInst>(&I);
+      auto GEP = dyn_cast<GetElementPtrInst>(&I);
+      auto IsPhi = isa<PHINode>(&I);
+      auto InsertPt = IsPhi
+        ? F.getEntryBlock().getFirstInsertionPt()
+        : I.getIterator();
+      for (unsigned i = 0; i < I.getNumOperands(); ++i) {
+        if (CI && CI->isBundleOperand(i)) {
+          continue;
+        }
+        if (GEP && (i < 2 || GEP->getSourceElementType()->isStructTy())) {
+          continue;
+        }
+        auto Opr = I.getOperand(i);
+        if (auto CEP = dyn_cast<ConstantExpr>(Opr)) {
+          IRB.SetInsertPoint(InsertPt);
+          auto CEPInst = CEP->getAsInstruction();
+          IRB.Insert(CEPInst);
+          I.setOperand(i, CEPInst);
+          Changed = true;
+        }
+      }
+    }
+  }
+  return Changed;
 }

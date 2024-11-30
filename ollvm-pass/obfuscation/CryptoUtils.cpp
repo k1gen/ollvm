@@ -33,6 +33,8 @@
 #ifdef _WIN32
 #include <random>
 #include <chrono>
+#else
+#include <fstream>
 #endif
 
 // Stats

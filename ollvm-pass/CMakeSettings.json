@@ -1,0 +1,16 @@
+﻿{
+  "configurations": [
+    {
+      "name": "x64-Release",
+      "generator": "Ninja",
+      "configurationType": "Release",
+      "inheritEnvironments": [ "msvc_x64_x64" ],
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "-DCMAKE_CXX_STANDARD=17 -DBUILD_SHARED_LIBS=ON -DLT_LLVM_INSTALL_DIR=C:\\Program Files\\LLVM",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "variables": []
+    }
+  ]
+}

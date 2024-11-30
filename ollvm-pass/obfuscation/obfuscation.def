@@ -1,3 +1,3 @@
-LIBRARY LLVMObfuscationx
+LIBRARY ollvm
 EXPORTS
 llvmGetPassPluginInfo

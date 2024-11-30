@@ -5,7 +5,7 @@ project(ollvm-pass)
 # 1. LOAD LLVM CONFIGURATION
 #===============================================================================
 # Set this to a valid LLVM installation dir
-set(LT_LLVM_INSTALL_DIR  "" CACHE PATH "D:\\dev\\rust_ollvm\\llvm-build\\llvm_x64")
+set(LT_LLVM_INSTALL_DIR  "" CACHE PATH "C:\\Program Files\\LLVM")
 
 # Add the location of LLVMConfig.cmake to CMake search paths (so that
 # find_package can locate it)

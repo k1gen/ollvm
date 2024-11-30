@@ -26,3 +26,11 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         LINK_FLAGS "-static -static-libgcc -Wl,-Bstatic,--whole-archive -lwinpthread -lstdc++ -Wl,--no-whole-archive -Wl,-Bdynamic"
     )
 endif()
+
+# Add a post-build command to move the DLL to the root directory
+add_custom_command(TARGET ollvm POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rename
+            $<TARGET_FILE:ollvm>
+            ${CMAKE_SOURCE_DIR}/../$<TARGET_FILE_NAME:ollvm>
+    COMMENT "Moving ollvm.dll to the root directory"
+)

@@ -1,13 +1,10 @@
 {
-  description = "Nix flake for building the ollvm-pass LLVM plugin";
+  description = "Nix flake for building the ollvm LLVM obfuscation pass";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    llvm-fork = {
-      url = "github:rust-lang/llvm-project/rustc/20.1-2025-02-13";
-      flake = false;
-    };
+    rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
   outputs =
@@ -15,72 +12,50 @@
       self,
       nixpkgs,
       flake-utils,
-      llvm-fork,
+      rust-overlay,
       ...
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = import nixpkgs { inherit system; };
-        rustllvm = pkgs.stdenv.mkDerivation {
-          pname = "rust-llvm-project";
-          version = "20.1-2025-02-13";
-          src = llvm-fork;
-
-          nativeBuildInputs = with pkgs; [
-            cmake
-            ninja
-            python3
-            git
-          ];
-
-          configurePhase = ''
-            cmake -G Ninja -S llvm -B build \
-              -DCMAKE_INSTALL_PREFIX=$out \
-              -DCMAKE_CXX_STANDARD=17 \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DLLVM_TARGETS_TO_BUILD=X86 \
-              -DLLVM_BUILD_LLVM_DYLIB=ON \
-              -DLLVM_LINK_LLVM_DYLIB=ON \
-              -DLLVM_EXPORT_SYMBOLS_FOR_PLUGINS=ON \
-              -DLLVM_ENABLE_BACKTRACES=OFF \
-              -DLLVM_INCLUDE_BENCHMARKS=OFF \
-              -DLLVM_INCLUDE_EXAMPLES=OFF \
-              -DLLVM_INCLUDE_TESTS=OFF \
-              -DLLVM_INCLUDE_TOOLS=OFF \
-              -DLLVM_INSTALL_UTILS=OFF
-          '';
-
-          buildPhase = ''
-            ninja -C build
-          '';
-
-          installPhase = ''
-            ninja -C build install
-          '';
-
-          meta.description = "Rust's fork of LLVM";
-        };
-
-        ollvm = pkgs.stdenv.mkDerivation {
-          pname = "ollvm-pass";
+        overlays = [ (import rust-overlay) ];
+        pkgs = import nixpkgs { inherit system overlays; };
+        llvm = pkgs.llvmPackages_20.llvm;
+        rust = pkgs.rust-bin.selectLatestNightlyWith (
+          tc:
+          tc.default.override {
+            extensions = [
+              "rust-src"
+              "llvm-tools-preview"
+            ];
+            targets = [ "x86_64-unknown-linux-gnu" ];
+          }
+        );
+      in
+      {
+        packages.ollvm = pkgs.stdenv.mkDerivation {
+          pname = "ollvm";
           version = "0.1.0";
-          src = ./ollvm-pass;
+          src = ./.;
 
           nativeBuildInputs = with pkgs; [
             cmake
             ninja
           ];
-          buildInputs = [ rustllvm ];
+          buildInputs = [
+            llvm
+            rust
+          ];
 
           configurePhase = ''
             cmake -G Ninja -B build \
               -DCMAKE_BUILD_TYPE=Release \
-              -DLLVM_DIR=${rustllvm}/lib/cmake/llvm \
+              -DLLVM_DIR=${llvm}/lib/cmake/llvm \
               -DLLVM_EXPORT_SYMBOLS_FOR_PLUGINS=ON \
+              -DBUILD_SHARED_LIBS=ON \
+              -DLLVM_LINK_LLVM_DYLIB=ON \
               -DCMAKE_CXX_FLAGS="-Wall -fno-rtti -O3 -march=x86-64-v3 -flto" \
-              -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-rpath,${rustllvm}/lib" \
-              -DCMAKE_INSTALL_RPATH="${rustllvm}/lib"
+              -DCMAKE_SHARED_LINKER_FLAGS="-L${rust}/lib -Wl,-rpath,${rust}/lib -l:libLLVM.so.20.1-rust-1.89.0-nightly"
           '';
 
           buildPhase = ''
@@ -89,13 +64,15 @@
 
           installPhase = ''
             mkdir -p $out/lib
-            cp build/obfuscation/libollvm.so $out/lib/
+            cp build/ollvm.so $out/lib/
           '';
+
+          meta = with pkgs.lib; {
+            description = "OLLVM: LLVM Obfuscation Pass";
+            maintainers = with maintainers; [ olk ];
+          };
         };
-      in
-      {
-        packages.ollvm-pass = ollvm;
-        defaultPackage = self.packages.${system}.ollvm-pass;
+        defaultPackage = self.packages.${system}.ollvm;
       }
     );
 }

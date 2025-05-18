@@ -260,4 +260,3 @@ private:
 }
 
 #endif // LLVM_CryptoUtils_H
-

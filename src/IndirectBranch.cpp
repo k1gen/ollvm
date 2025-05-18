@@ -3,7 +3,6 @@
 #include "llvm/Support/raw_ostream.h"
 #include "include/IndirectBranch.h"
 #include "include/ObfuscationOptions.h"
-#include "include/Utils.h"
 #include "include/CryptoUtils.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
@@ -18,13 +17,14 @@ namespace {
 struct IndirectBranch : public FunctionPass {
   unsigned pointerSize;
   static char ID;
-  
+
   ObfuscationOptions *ArgsOptions;
   std::map<BasicBlock *, unsigned> BBNumbering;
-  std::vector<BasicBlock *> BBTargets;        //all conditional branch targets
+  std::vector<BasicBlock *> BBTargets; // all conditional branch targets
   CryptoUtils RandomEngine;
 
-  IndirectBranch(unsigned pointerSize, ObfuscationOptions *argsOptions) : FunctionPass(ID) {
+  IndirectBranch(unsigned pointerSize, ObfuscationOptions *argsOptions)
+      : FunctionPass(ID) {
     this->pointerSize = pointerSize;
     this->ArgsOptions = argsOptions;
   }
@@ -52,7 +52,7 @@ struct IndirectBranch : public FunctionPass {
     std::shuffle(BBTargets.begin(), BBTargets.end(), e);
 
     unsigned N = 0;
-    for (auto BB:BBTargets) {
+    for (auto BB : BBTargets) {
       BBNumbering[BB] = N++;
     }
   }
@@ -65,22 +65,26 @@ struct IndirectBranch : public FunctionPass {
 
     // encrypt branch targets
     std::vector<Constant *> Elements;
-    for (const auto BB:BBTargets) {
-      Constant *CE = ConstantExpr::getBitCast(BlockAddress::get(BB), PointerType::getUnqual(F.getContext()));
-      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, EncKey);
+    for (const auto BB : BBTargets) {
+      Constant *CE = ConstantExpr::getBitCast(
+          BlockAddress::get(BB), PointerType::getUnqual(F.getContext()));
+      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE,
+                                          EncKey);
       Elements.push_back(CE);
     }
 
     ArrayType *ATy =
         ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
     Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
-    GV = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
-                                               CA, GVName);
+    GV = new GlobalVariable(*F.getParent(), ATy, false,
+                            GlobalValue::LinkageTypes::PrivateLinkage, CA,
+                            GVName);
     appendToCompilerUsed(*F.getParent(), {GV});
     return GV;
   }
 
-  GlobalVariable *getIndirectTargets1(Function &F, ConstantInt *AddKey, ConstantInt *XorKey) const {
+  GlobalVariable *getIndirectTargets1(Function &F, ConstantInt *AddKey,
+                                      ConstantInt *XorKey) const {
     std::string GVName(F.getName().str() + "_IndirectBrTargets1");
     GlobalVariable *GV = F.getParent()->getNamedGlobal(GVName);
     if (GV)
@@ -88,50 +92,62 @@ struct IndirectBranch : public FunctionPass {
 
     // encrypt branch targets
     std::vector<Constant *> Elements;
-    for (const auto BB:BBTargets) {
-      Constant *CE = ConstantExpr::getBitCast(BlockAddress::get(BB), PointerType::getUnqual(F.getContext()));
-      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, ConstantExpr::getXor(AddKey, XorKey));
+    for (const auto BB : BBTargets) {
+      Constant *CE = ConstantExpr::getBitCast(
+          BlockAddress::get(BB), PointerType::getUnqual(F.getContext()));
+      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE,
+                                          ConstantExpr::getXor(AddKey, XorKey));
       Elements.push_back(CE);
     }
 
     ArrayType *ATy =
-      ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
+        ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
     Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
-    GV = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
-      CA, GVName);
+    GV = new GlobalVariable(*F.getParent(), ATy, false,
+                            GlobalValue::LinkageTypes::PrivateLinkage, CA,
+                            GVName);
     appendToCompilerUsed(*F.getParent(), {GV});
     return GV;
   }
 
-  GlobalVariable *getIndirectTargets2(Function &F, ConstantInt *AddKey, ConstantInt *XorKey) {
+  GlobalVariable *getIndirectTargets2(Function &F, ConstantInt *AddKey,
+                                      ConstantInt *XorKey) {
     std::string GVName(F.getName().str() + "_IndirectBrTargets2");
     GlobalVariable *GV = F.getParent()->getNamedGlobal(GVName);
     if (GV)
       return GV;
 
-    auto& Ctx = F.getContext();
+    auto &Ctx = F.getContext();
     IntegerType *intType = Type::getInt32Ty(Ctx);
     if (pointerSize == 8) {
       intType = Type::getInt64Ty(Ctx);
     }
     // encrypt branch targets
     std::vector<Constant *> Elements;
-    for (auto BB:BBTargets) {
-      Constant *CE = ConstantExpr::getBitCast(BlockAddress::get(BB), PointerType::getUnqual(F.getContext()));
-      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, ConstantExpr::getXor(AddKey, ConstantExpr::getMul(XorKey, ConstantInt::get(intType, BBNumbering[BB], false))));
+    for (auto BB : BBTargets) {
+      Constant *CE = ConstantExpr::getBitCast(
+          BlockAddress::get(BB), PointerType::getUnqual(F.getContext()));
+      CE = ConstantExpr::getGetElementPtr(
+          Type::getInt8Ty(F.getContext()), CE,
+          ConstantExpr::getXor(
+              AddKey,
+              ConstantExpr::getMul(
+                  XorKey, ConstantInt::get(intType, BBNumbering[BB], false))));
       Elements.push_back(CE);
     }
 
     ArrayType *ATy =
-      ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
+        ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
     Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
-    GV = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
-      CA, GVName);
+    GV = new GlobalVariable(*F.getParent(), ATy, false,
+                            GlobalValue::LinkageTypes::PrivateLinkage, CA,
+                            GVName);
     appendToCompilerUsed(*F.getParent(), {GV});
     return GV;
   }
 
-  std::pair<GlobalVariable *, GlobalVariable *> getIndirectTargets3(Function &F, ConstantInt *AddKey) {
+  std::pair<GlobalVariable *, GlobalVariable *>
+  getIndirectTargets3(Function &F, ConstantInt *AddKey) {
     std::string GVNameAdd(F.getName().str() + "_IndirectBrTargets3");
     std::string GVNameXor(F.getName().str() + "_IndirectBr3_Xor");
     GlobalVariable *GVAdd = F.getParent()->getNamedGlobal(GVNameAdd);
@@ -140,7 +156,7 @@ struct IndirectBranch : public FunctionPass {
     if (GVAdd && GVXor)
       return std::make_pair(GVAdd, GVXor);
 
-    auto& Ctx = F.getContext();
+    auto &Ctx = F.getContext();
     IntegerType *intType = Type::getInt32Ty(Ctx);
     if (pointerSize == 8) {
       intType = Type::getInt64Ty(Ctx);
@@ -149,11 +165,17 @@ struct IndirectBranch : public FunctionPass {
     // encrypt branch targets
     std::vector<Constant *> Elements;
     std::vector<Constant *> XorKeys;
-    for (auto BB:BBTargets) {
+    for (auto BB : BBTargets) {
       uint64_t V = RandomEngine.get_uint64_t();
       Constant *XorKey = ConstantInt::get(intType, V, false);
-      Constant *CE = ConstantExpr::getBitCast(BlockAddress::get(BB), PointerType::getUnqual(F.getContext()));
-      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, ConstantExpr::getXor(AddKey, ConstantExpr::getMul(XorKey, ConstantInt::get(intType, BBNumbering[BB], false))));
+      Constant *CE = ConstantExpr::getBitCast(
+          BlockAddress::get(BB), PointerType::getUnqual(F.getContext()));
+      CE = ConstantExpr::getGetElementPtr(
+          Type::getInt8Ty(F.getContext()), CE,
+          ConstantExpr::getXor(
+              AddKey,
+              ConstantExpr::getMul(
+                  XorKey, ConstantInt::get(intType, BBNumbering[BB], false))));
 
       XorKey = ConstantExpr::getNeg(XorKey);
       XorKey = ConstantExpr::getXor(XorKey, AddKey);
@@ -163,20 +185,22 @@ struct IndirectBranch : public FunctionPass {
     }
 
     ArrayType *ATy =
-      ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
+        ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
     Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
-    GVAdd = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
-      CA, GVNameAdd);
+    GVAdd = new GlobalVariable(*F.getParent(), ATy, false,
+                               GlobalValue::LinkageTypes::PrivateLinkage, CA,
+                               GVNameAdd);
     appendToCompilerUsed(*F.getParent(), {GVAdd});
 
     ArrayType *XTy = ArrayType::get(intType, XorKeys.size());
     Constant *CX = ConstantArray::get(XTy, XorKeys);
-    GVXor = new GlobalVariable(*F.getParent(), XTy, false, GlobalValue::LinkageTypes::PrivateLinkage, CX, GVNameXor);
+    GVXor = new GlobalVariable(*F.getParent(), XTy, false,
+                               GlobalValue::LinkageTypes::PrivateLinkage, CX,
+                               GVNameXor);
     appendToCompilerUsed(*F.getParent(), {GVXor});
 
     return std::make_pair(GVAdd, GVXor);
   }
-
 
   bool runOnFunction(Function &Fn) override {
 
@@ -186,7 +210,8 @@ struct IndirectBranch : public FunctionPass {
       return false;
     }
 
-    if (Fn.empty() || Fn.hasLinkOnceLinkage() || Fn.getSection() == ".text.startup") {
+    if (Fn.empty() || Fn.hasLinkOnceLinkage() ||
+        Fn.getSection() == ".text.startup") {
       return false;
     }
 
@@ -206,7 +231,7 @@ struct IndirectBranch : public FunctionPass {
 
     uint64_t V = RandomEngine.get_uint64_t();
     uint64_t XV = RandomEngine.get_uint64_t();
-    IntegerType* intType = Type::getInt32Ty(Ctx);
+    IntegerType *intType = Type::getInt32Ty(Ctx);
     if (pointerSize == 8) {
       intType = Type::getInt64Ty(Ctx);
     }
@@ -222,8 +247,9 @@ struct IndirectBranch : public FunctionPass {
       DestBBs = getIndirectTargets0(Fn, EncKey1);
     } else if (opt.level() == 1 || opt.level() == 2) {
       ConstantInt *CXK = ConstantInt::get(intType, XV, false);
-      GXorKey = new GlobalVariable(*Fn.getParent(), CXK->getType(), false, GlobalValue::LinkageTypes::PrivateLinkage,
-        CXK, Fn.getName() + "_IBrXorKey");
+      GXorKey = new GlobalVariable(*Fn.getParent(), CXK->getType(), false,
+                                   GlobalValue::LinkageTypes::PrivateLinkage,
+                                   CXK, Fn.getName() + "_IBrXorKey");
       appendToCompilerUsed(*Fn.getParent(), {GXorKey});
       if (opt.level() == 1) {
         DestBBs = getIndirectTargets1(Fn, EncKey1, CXK);
@@ -249,13 +275,9 @@ struct IndirectBranch : public FunctionPass {
         FIdx = ConstantInt::get(intType, BBNumbering[BI->getSuccessor(1)]);
         Idx = IRB.CreateSelect(Cond, TIdx, FIdx);
 
-        Value *GEP = IRB.CreateGEP(
-          DestBBs->getValueType(), DestBBs,
-            {Zero, Idx});
-        Value *EncDestAddr = IRB.CreateLoad(
-            GEP->getType(),
-            GEP,
-            "EncDestAddr");
+        Value *GEP =
+            IRB.CreateGEP(DestBBs->getValueType(), DestBBs, {Zero, Idx});
+        Value *EncDestAddr = IRB.CreateLoad(GEP->getType(), GEP, "EncDestAddr");
         // -EncKey = X - FuncSecret
         Value *DecKey = EncKey;
 
@@ -272,7 +294,8 @@ struct IndirectBranch : public FunctionPass {
         }
 
         if (XorKeys) {
-          Value *XorKeysGEP = IRB.CreateGEP(XorKeys->getValueType(), XorKeys, {Zero, Idx});
+          Value *XorKeysGEP =
+              IRB.CreateGEP(XorKeys->getValueType(), XorKeys, {Zero, Idx});
 
           Value *XorKey = IRB.CreateLoad(intType, XorKeysGEP);
 
@@ -284,9 +307,8 @@ struct IndirectBranch : public FunctionPass {
           DecKey = IRB.CreateNeg(DecKey);
         }
 
-        Value *DestAddr = IRB.CreateGEP(
-          Type::getInt8Ty(Ctx),
-            EncDestAddr, DecKey);
+        Value *DestAddr =
+            IRB.CreateGEP(Type::getInt8Ty(Ctx), EncDestAddr, DecKey);
 
         IndirectBrInst *IBI = IndirectBrInst::Create(DestAddr, 2);
         IBI->addDestination(BI->getSuccessor(0));
@@ -297,12 +319,13 @@ struct IndirectBranch : public FunctionPass {
 
     return true;
   }
-
 };
-} // namespace llvm
+} // namespace
 
 char IndirectBranch::ID = 0;
-FunctionPass *llvm::createIndirectBranchPass(unsigned pointerSize, ObfuscationOptions *argsOptions) {
+FunctionPass *llvm::createIndirectBranchPass(unsigned pointerSize,
+                                             ObfuscationOptions *argsOptions) {
   return new IndirectBranch(pointerSize, argsOptions);
 }
-INITIALIZE_PASS(IndirectBranch, "indbr", "Enable IR Indirect Branch Obfuscation", false, false)
+INITIALIZE_PASS(IndirectBranch, "indbr",
+                "Enable IR Indirect Branch Obfuscation", false, false)

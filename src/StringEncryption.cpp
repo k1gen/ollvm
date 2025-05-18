@@ -505,7 +505,7 @@ bool StringEncryption::processConstantStringUse(Function *F) {
                 Inst.replaceUsesOfWith(GV, Entry->DecGV);
               } else {
                 IRBuilder<> IRB(&Inst);
-                
+
                 Value *OutBuf = IRB.CreateBitCast(Entry->DecGV,
                                                   PointerType::getUnqual(Ctx));
                 Value *Data = IRB.CreateInBoundsGEP(

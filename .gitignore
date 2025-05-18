@@ -1,4 +1,5 @@
 build
+/result
 .vscode
 /.vs
 /ollvm-pass/.vs

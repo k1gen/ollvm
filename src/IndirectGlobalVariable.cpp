@@ -17,7 +17,7 @@ namespace {
 struct IndirectGlobalVariable : public FunctionPass {
   unsigned pointerSize;
   static char ID;
-  
+
   ObfuscationOptions *ArgsOptions;
   std::map<GlobalVariable *, unsigned> GVNumbering;
   std::vector<GlobalVariable *> GlobalVariables;
@@ -228,7 +228,7 @@ struct IndirectGlobalVariable : public FunctionPass {
       Instruction *Inst = &*I;
       if (isa<LandingPadInst>(Inst) || isa<CleanupPadInst>(Inst) ||
           isa<CatchPadInst>(Inst) || isa<CatchReturnInst>(Inst) ||
-          isa<CatchSwitchInst>(Inst) || isa<ResumeInst>(Inst) || 
+          isa<CatchSwitchInst>(Inst) || isa<ResumeInst>(Inst) ||
           isa<CallInst>(Inst)) {
         continue;
       }

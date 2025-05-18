@@ -17,7 +17,7 @@ namespace {
 struct IndirectCall : public FunctionPass {
   static char ID;
   unsigned pointerSize;
-  
+
   ObfuscationOptions *ArgsOptions;
   std::map<Function *, unsigned> CalleeNumbering;
   std::vector<CallInst *> CallSites;
@@ -137,7 +137,7 @@ struct IndirectCall : public FunctionPass {
     GV = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
       CA, GVName);
     appendToCompilerUsed(*F.getParent(), {GV});
-    
+
     return GV;
   }
 
@@ -273,7 +273,7 @@ struct IndirectCall : public FunctionPass {
 
       if (XorKeys) {
         Value *XorKeysGEP = IRB.CreateGEP(XorKeys->getValueType(), XorKeys, {Zero, Idx});
-        
+
         Value *XorKey = IRB.CreateLoad(intType, XorKeysGEP);
 
         XorKey = IRB.CreateNeg(XorKey);

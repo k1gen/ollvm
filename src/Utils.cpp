@@ -22,9 +22,9 @@ bool valueEscapes(Instruction *Inst) {
 
 void fixStack(Function *f) {
   // Try to remove phi node and demote reg to stack
-  std::vector<PHINode *>     tmpPhi;
+  std::vector<PHINode *> tmpPhi;
   std::vector<Instruction *> tmpReg;
-  BasicBlock *               bbEntry = &*f->begin();
+  BasicBlock *bbEntry = &*f->begin();
 
   do {
     tmpPhi.clear();
@@ -57,14 +57,14 @@ void fixStack(Function *f) {
   } while (tmpReg.size() != 0 || tmpPhi.size() != 0);
 }
 
-CallBase* fixEH(CallBase* CB) {
+CallBase *fixEH(CallBase *CB) {
   const auto BB = CB->getParent();
   if (!BB) {
     return CB;
   }
   const auto Fn = BB->getParent();
-  if (!Fn || !Fn->hasPersonalityFn()
-    || !isScopedEHPersonality(classifyEHPersonality(Fn->getPersonalityFn()))) {
+  if (!Fn || !Fn->hasPersonalityFn() ||
+      !isScopedEHPersonality(classifyEHPersonality(Fn->getPersonalityFn()))) {
     return CB;
   }
   const auto BlockColors = colorEHFunclets(*Fn);
@@ -72,7 +72,7 @@ CallBase* fixEH(CallBase* CB) {
   if (BBColor == BlockColors.end()) {
     return CB;
   }
-  const auto& ColorVec = BBColor->getSecond();
+  const auto &ColorVec = BBColor->getSecond();
   assert(ColorVec.size() == 1 && "non-unique color for block!");
 
   const auto EHBlock = ColorVec.front();
@@ -82,7 +82,8 @@ CallBase* fixEH(CallBase* CB) {
   const auto EHPad = EHBlock->getFirstNonPHI();
 
   const OperandBundleDef OB("funclet", EHPad);
-  auto *NewCall = CallBase::addOperandBundle(CB, LLVMContext::OB_funclet, OB, CB);
+  auto *NewCall =
+      CallBase::addOperandBundle(CB, LLVMContext::OB_funclet, OB, CB);
   NewCall->copyMetadata(*CB);
   CB->replaceAllUsesWith(NewCall);
   CB->eraseFromParent();
@@ -95,8 +96,8 @@ void LowerConstantExpr(Function &F) {
   for (inst_iterator It = inst_begin(F), E = inst_end(F); It != E; ++It) {
     Instruction *I = &*It;
 
-    if (isa<LandingPadInst>(I) || isa<CatchPadInst>(I) || isa<
-          CatchSwitchInst>(I) || isa<CatchReturnInst>(I))
+    if (isa<LandingPadInst>(I) || isa<CatchPadInst>(I) ||
+        isa<CatchSwitchInst>(I) || isa<CatchReturnInst>(I))
       continue;
     if (auto *II = dyn_cast<IntrinsicInst>(I)) {
       if (II->getIntrinsicID() == Intrinsic::eh_typeid_for) {
@@ -111,15 +112,15 @@ void LowerConstantExpr(Function &F) {
   }
 
   while (!WorkList.empty()) {
-    auto         It = WorkList.begin();
+    auto It = WorkList.begin();
     Instruction *I = *It;
     WorkList.erase(*It);
 
     if (PHINode *PHI = dyn_cast<PHINode>(I)) {
       for (unsigned int i = 0; i < PHI->getNumIncomingValues(); ++i) {
         Instruction *TI = PHI->getIncomingBlock(i)->getTerminator();
-        if (ConstantExpr *CE = dyn_cast<
-          ConstantExpr>(PHI->getIncomingValue(i))) {
+        if (ConstantExpr *CE =
+                dyn_cast<ConstantExpr>(PHI->getIncomingValue(i))) {
           Instruction *NewInst = CE->getAsInstruction();
           NewInst->insertBefore(TI);
           PHI->setIncomingValue(i, NewInst);
@@ -140,22 +141,21 @@ void LowerConstantExpr(Function &F) {
 }
 
 bool expandConstantExpr(Function &F) {
-  bool                Changed = false;
-  LLVMContext &       Ctx = F.getContext();
+  bool Changed = false;
+  LLVMContext &Ctx = F.getContext();
   IRBuilder<NoFolder> IRB(Ctx);
 
   for (auto &BB : F) {
     for (auto &I : BB) {
       if (I.isEHPad() || isa<AllocaInst>(&I) || isa<IntrinsicInst>(&I) ||
-        isa<SwitchInst>(&I) || I.isAtomic()) {
+          isa<SwitchInst>(&I) || I.isAtomic()) {
         continue;
       }
       auto CI = dyn_cast<CallInst>(&I);
       auto GEP = dyn_cast<GetElementPtrInst>(&I);
       auto IsPhi = isa<PHINode>(&I);
-      auto InsertPt = IsPhi
-        ? F.getEntryBlock().getFirstInsertionPt()
-        : I.getIterator();
+      auto InsertPt =
+          IsPhi ? F.getEntryBlock().getFirstInsertionPt() : I.getIterator();
       for (unsigned i = 0; i < I.getNumOperands(); ++i) {
         if (CI && CI->isBundleOperand(i)) {
           continue;

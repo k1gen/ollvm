@@ -12,10 +12,6 @@
 #include "include/CryptoUtils.h"
 #include "llvm/IR/NoFolder.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
-#include <map>
-#include <set>
-#include <iostream>
-#include <algorithm>
 
 #define DEBUG_TYPE "constant-fp-encryption"
 
@@ -24,39 +20,36 @@ using namespace llvm;
 namespace {
 
 struct ConstantFPEncryption : public FunctionPass {
-  static char         ID;
+  static char ID;
   ObfuscationOptions *ArgsOptions;
-  CryptoUtils         RandomEngine;
+  CryptoUtils RandomEngine;
 
   ConstantFPEncryption(ObfuscationOptions *argsOptions) : FunctionPass(ID) {
     this->ArgsOptions = argsOptions;
   }
 
-  StringRef getPassName() const override {
-    return {"ConstantFPEncryption"};
-  }
+  StringRef getPassName() const override { return {"ConstantFPEncryption"}; }
 
   Value *createConstantFPEncrypt0(BasicBlock::iterator ip, ConstantFP *CFP) {
-    const auto  Module = ip->getModule();
+    const auto Module = ip->getModule();
     auto &LLVMContent = Module->getContext();
 
     IRBuilder<NoFolder> IRB(ip->getContext());
     IRB.SetInsertPoint(ip);
-    const auto FPWidth = CFP->getType()->getPrimitiveSizeInBits().
-                              getFixedValue();
+    const auto FPWidth =
+        CFP->getType()->getPrimitiveSizeInBits().getFixedValue();
 
-
-    const auto Key = ConstantInt::get(
-        IntegerType::get(LLVMContent, FPWidth),
-        RandomEngine.get_uint64_t());
+    const auto Key = ConstantInt::get(IntegerType::get(LLVMContent, FPWidth),
+                                      RandomEngine.get_uint64_t());
 
     const auto FPInt = ConstantExpr::getBitCast(CFP, Key->getType());
 
     const auto Enc = ConstantExpr::getSub(FPInt, Key);
-    auto       GV = new GlobalVariable(*Module, Enc->getType(), false,
-                                       GlobalValue::LinkageTypes::PrivateLinkage,
-                                       Enc,
-                                       ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstFPEnc" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GV = new GlobalVariable(
+        *Module, Enc->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, Enc,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstFPEnc" + std::to_string(RandomEngine.get_uint64_t()));
 
     appendToCompilerUsed(*Module, {GV});
     // outs() << I << " ->\n";
@@ -67,38 +60,37 @@ struct ConstantFPEncryption : public FunctionPass {
   }
 
   Value *createConstantFPEncrypt1(BasicBlock::iterator ip, ConstantFP *CFP) {
-    const auto  Module = ip->getModule();
+    const auto Module = ip->getModule();
     auto &LLVMContent = Module->getContext();
 
     IRBuilder<NoFolder> IRB(ip->getContext());
     IRB.SetInsertPoint(ip);
-    const auto FPWidth = CFP->getType()->getPrimitiveSizeInBits().
-      getFixedValue();
+    const auto FPWidth =
+        CFP->getType()->getPrimitiveSizeInBits().getFixedValue();
 
+    const auto Key = ConstantInt::get(IntegerType::get(LLVMContent, FPWidth),
+                                      RandomEngine.get_uint64_t());
 
-    const auto Key = ConstantInt::get(
-      IntegerType::get(LLVMContent, FPWidth),
-      RandomEngine.get_uint64_t());
-
-    const auto XorKey = ConstantInt::get(Key->getType(),
-      RandomEngine.get_uint64_t());
-
+    const auto XorKey =
+        ConstantInt::get(Key->getType(), RandomEngine.get_uint64_t());
 
     const auto FPInt = ConstantExpr::getBitCast(CFP, Key->getType());
 
     auto Enc = ConstantExpr::getSub(FPInt, Key);
     Enc = ConstantExpr::getXor(Enc, XorKey);
 
-    auto       GV = new GlobalVariable(*Module, Enc->getType(), false,
-      GlobalValue::LinkageTypes::PrivateLinkage,
-      Enc,
-      ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstFPEnc" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GV = new GlobalVariable(
+        *Module, Enc->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, Enc,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstFPEnc" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GV});
 
-    auto GXorKey = new GlobalVariable(*Module, XorKey->getType(), false,
-      GlobalValue::LinkageTypes::PrivateLinkage,
-      XorKey,
-      ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstFPEncKey" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GXorKey = new GlobalVariable(
+        *Module, XorKey->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, XorKey,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstFPEncKey" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GXorKey});
 
     // outs() << I << " ->\n";
@@ -111,21 +103,19 @@ struct ConstantFPEncryption : public FunctionPass {
   }
 
   Value *createConstantFPEncrypt2(BasicBlock::iterator ip, ConstantFP *CFP) {
-    const auto  Module = ip->getModule();
+    const auto Module = ip->getModule();
     auto &LLVMContent = Module->getContext();
 
     IRBuilder<NoFolder> IRB(ip->getContext());
     IRB.SetInsertPoint(ip);
-    const auto FPWidth = CFP->getType()->getPrimitiveSizeInBits().
-      getFixedValue();
+    const auto FPWidth =
+        CFP->getType()->getPrimitiveSizeInBits().getFixedValue();
 
+    const auto Key = ConstantInt::get(IntegerType::get(LLVMContent, FPWidth),
+                                      RandomEngine.get_uint64_t());
 
-    const auto Key = ConstantInt::get(
-      IntegerType::get(LLVMContent, FPWidth),
-      RandomEngine.get_uint64_t());
-
-    const auto XorKey = ConstantInt::get(Key->getType(),
-      RandomEngine.get_uint64_t());
+    const auto XorKey =
+        ConstantInt::get(Key->getType(), RandomEngine.get_uint64_t());
     const auto MulXorKey = ConstantExpr::getMul(Key, XorKey);
 
     const auto FPInt = ConstantExpr::getBitCast(CFP, Key->getType());
@@ -133,16 +123,18 @@ struct ConstantFPEncryption : public FunctionPass {
     auto Enc = ConstantExpr::getSub(FPInt, Key);
     Enc = ConstantExpr::getXor(Enc, MulXorKey);
 
-    auto       GV = new GlobalVariable(*Module, Enc->getType(), false,
-      GlobalValue::LinkageTypes::PrivateLinkage,
-      Enc,
-      ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstFPEnc" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GV = new GlobalVariable(
+        *Module, Enc->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, Enc,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstFPEnc" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GV});
 
-    auto GXorKey = new GlobalVariable(*Module, XorKey->getType(), false,
-      GlobalValue::LinkageTypes::PrivateLinkage,
-      XorKey,
-      ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstFPEncKey" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GXorKey = new GlobalVariable(
+        *Module, XorKey->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, XorKey,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstFPEncKey" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GXorKey});
 
     // outs() << I << " ->\n";
@@ -156,21 +148,18 @@ struct ConstantFPEncryption : public FunctionPass {
   }
 
   Value *createConstantFPEncrypt3(BasicBlock::iterator ip, ConstantFP *CFP) {
-    const auto  Module = ip->getModule();
+    const auto Module = ip->getModule();
     auto &LLVMContent = Module->getContext();
 
     IRBuilder<NoFolder> IRB(ip->getContext());
     IRB.SetInsertPoint(ip);
-    const auto FPWidth = CFP->getType()->getPrimitiveSizeInBits().
-      getFixedValue();
+    const auto FPWidth =
+        CFP->getType()->getPrimitiveSizeInBits().getFixedValue();
 
+    const auto Key = ConstantInt::get(IntegerType::get(LLVMContent, FPWidth),
+                                      RandomEngine.get_uint64_t());
 
-    const auto Key = ConstantInt::get(
-      IntegerType::get(LLVMContent, FPWidth),
-      RandomEngine.get_uint64_t());
-
-    auto XorKey = ConstantInt::get(Key->getType(),
-      RandomEngine.get_uint64_t());
+    auto XorKey = ConstantInt::get(Key->getType(), RandomEngine.get_uint64_t());
     const auto MulXorKey = ConstantExpr::getMul(Key, XorKey);
 
     const auto FPInt = ConstantExpr::getBitCast(CFP, Key->getType());
@@ -182,16 +171,18 @@ struct ConstantFPEncryption : public FunctionPass {
     XorKey = ConstantExpr::getXor(XorKey, Enc);
     XorKey = ConstantExpr::getNeg(XorKey);
 
-    auto       GV = new GlobalVariable(*Module, Enc->getType(), false,
-      GlobalValue::LinkageTypes::PrivateLinkage,
-      Enc,
-      ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstFPEnc" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GV = new GlobalVariable(
+        *Module, Enc->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, Enc,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstFPEnc" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GV});
 
-    auto GXorKey = new GlobalVariable(*Module, XorKey->getType(), false,
-      GlobalValue::LinkageTypes::PrivateLinkage,
-      XorKey,
-      ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstFPEncKey" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GXorKey = new GlobalVariable(
+        *Module, XorKey->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, XorKey,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstFPEncKey" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GXorKey});
 
     // outs() << I << " ->\n";
@@ -225,9 +216,8 @@ struct ConstantFPEncryption : public FunctionPass {
         auto CI = dyn_cast<CallInst>(&I);
         auto GEP = dyn_cast<GetElementPtrInst>(&I);
         auto IsPhi = isa<PHINode>(&I);
-        auto InsertPt = IsPhi
-                          ? F.getEntryBlock().getFirstInsertionPt()
-                          : I.getIterator();
+        auto InsertPt =
+            IsPhi ? F.getEntryBlock().getFirstInsertionPt() : I.getIterator();
 
         for (unsigned i = 0; i < I.getNumOperands(); ++i) {
           if (CI && CI->isBundleOperand(i)) {
@@ -254,20 +244,19 @@ struct ConstantFPEncryption : public FunctionPass {
             Changed = true;
           }
         }
-
       }
     }
     return Changed;
   }
 };
-} // namespace llvm
+} // namespace
 
 char ConstantFPEncryption::ID = 0;
 
-FunctionPass *llvm::createConstantFPEncryptionPass(
-    ObfuscationOptions *argsOptions) {
+FunctionPass *
+llvm::createConstantFPEncryptionPass(ObfuscationOptions *argsOptions) {
   return new ConstantFPEncryption(argsOptions);
 }
 
-INITIALIZE_PASS(ConstantFPEncryption, "cfe",
-                "Enable IR Constant FP Encryption", false, false)
+INITIALIZE_PASS(ConstantFPEncryption, "cfe", "Enable IR Constant FP Encryption",
+                false, false)

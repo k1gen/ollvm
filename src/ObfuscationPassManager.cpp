@@ -7,92 +7,78 @@
 #include "include/ObfuscationOptions.h"
 #include "llvm/IR/Module.h"
 
-
 #define DEBUG_TYPE "ir-obfuscation"
 
 using namespace llvm;
 
 static cl::opt<bool>
-EnableIRObfuscation("irobf", cl::init(false), cl::NotHidden,
-                    cl::desc("Enable IR Code Obfuscation."),
+    EnableIRObfuscation("irobf", cl::init(false), cl::NotHidden,
+                        cl::desc("Enable IR Code Obfuscation."),
+                        cl::ZeroOrMore);
+static cl::opt<bool>
+
+    EnableIndirectBr("irobf-indbr", cl::init(false), cl::NotHidden,
+                     cl::desc("Enable IR Indirect Branch Obfuscation."),
+                     cl::ZeroOrMore);
+static cl::opt<uint32_t>
+    LevelIndirectBr("level-indbr", cl::init(0), cl::NotHidden,
+                    cl::desc("Set IR Indirect Branch Obfuscation Level."),
                     cl::ZeroOrMore);
-static cl::opt<bool>
-
-
-
-EnableIndirectBr("irobf-indbr", cl::init(false), cl::NotHidden,
-                 cl::desc("Enable IR Indirect Branch Obfuscation."),
-                 cl::ZeroOrMore);
-static cl::opt<uint32_t>
-LevelIndirectBr("level-indbr", cl::init(0), cl::NotHidden,
-  cl::desc("Set IR Indirect Branch Obfuscation Level."),
-  cl::ZeroOrMore);
-
 
 static cl::opt<bool>
-EnableIndirectCall("irobf-icall", cl::init(false), cl::NotHidden,
-                   cl::desc("Enable IR Indirect Call Obfuscation."),
-                   cl::ZeroOrMore);
+    EnableIndirectCall("irobf-icall", cl::init(false), cl::NotHidden,
+                       cl::desc("Enable IR Indirect Call Obfuscation."),
+                       cl::ZeroOrMore);
 static cl::opt<uint32_t>
-LevelIndirectCall("level-icall", cl::init(0), cl::NotHidden,
-  cl::desc("Set IR Indirect Call Obfuscation Level."),
-  cl::ZeroOrMore);
-
+    LevelIndirectCall("level-icall", cl::init(0), cl::NotHidden,
+                      cl::desc("Set IR Indirect Call Obfuscation Level."),
+                      cl::ZeroOrMore);
 
 static cl::opt<bool> EnableIndirectGV(
     "irobf-indgv", cl::init(false), cl::NotHidden,
     cl::desc("Enable IR Indirect Global Variable Obfuscation."),
     cl::ZeroOrMore);
 static cl::opt<uint32_t> LevelIndirectGV(
-  "level-indgv", cl::init(0), cl::NotHidden,
-  cl::desc("Set IR Indirect Global Variable Obfuscation Level."),
-  cl::ZeroOrMore);
-
+    "level-indgv", cl::init(0), cl::NotHidden,
+    cl::desc("Set IR Indirect Global Variable Obfuscation Level."),
+    cl::ZeroOrMore);
 
 static cl::opt<bool> EnableIRFlattening(
     "irobf-cff", cl::init(false), cl::NotHidden,
     cl::desc("Enable IR Control Flow Flattening Obfuscation."), cl::ZeroOrMore);
 
-
 static cl::opt<bool>
-EnableIRStringEncryption("irobf-cse", cl::init(false), cl::NotHidden,
-                         cl::desc("Enable IR Constant String Encryption."),
-                         cl::ZeroOrMore);
+    EnableIRStringEncryption("irobf-cse", cl::init(false), cl::NotHidden,
+                             cl::desc("Enable IR Constant String Encryption."),
+                             cl::ZeroOrMore);
 
-
-static cl::opt<bool>
-EnableIRConstantIntEncryption("irobf-cie", cl::init(false), cl::NotHidden,
-  cl::desc("Enable IR Constant Integer Encryption."),
-  cl::ZeroOrMore);
+static cl::opt<bool> EnableIRConstantIntEncryption(
+    "irobf-cie", cl::init(false), cl::NotHidden,
+    cl::desc("Enable IR Constant Integer Encryption."), cl::ZeroOrMore);
 static cl::opt<uint32_t> LevelIRConstantIntEncryption(
-  "level-cie", cl::init(0), cl::NotHidden,
-  cl::desc("Set IR Constant Integer Encryption Level."),
-  cl::ZeroOrMore);
-
+    "level-cie", cl::init(0), cl::NotHidden,
+    cl::desc("Set IR Constant Integer Encryption Level."), cl::ZeroOrMore);
 
 static cl::opt<bool>
-EnableIRConstantFPEncryption("irobf-cfe", cl::init(false), cl::NotHidden,
-  cl::desc("Enable IR Constant FP Encryption."),
-  cl::ZeroOrMore);
+    EnableIRConstantFPEncryption("irobf-cfe", cl::init(false), cl::NotHidden,
+                                 cl::desc("Enable IR Constant FP Encryption."),
+                                 cl::ZeroOrMore);
 
 static cl::opt<uint32_t> LevelIRConstantFPEncryption(
-  "level-cfe", cl::init(0), cl::NotHidden,
-  cl::desc("Set IR Constant FP Encryption Level."),
-  cl::ZeroOrMore);
+    "level-cfe", cl::init(0), cl::NotHidden,
+    cl::desc("Set IR Constant FP Encryption Level."), cl::ZeroOrMore);
 
 namespace llvm {
 
 struct ObfuscationPassManager : public ModulePass {
-  static char            ID; // Pass identification
+  static char ID; // Pass identification
   SmallVector<Pass *, 8> Passes;
 
   ObfuscationPassManager() : ModulePass(ID) {
     initializeObfuscationPassManagerPass(*PassRegistry::getPassRegistry());
   };
 
-  StringRef getPassName() const override {
-    return "Obfuscation Pass Manager";
-  }
+  StringRef getPassName() const override { return "Obfuscation Pass Manager"; }
 
   bool doFinalization(Module &M) override {
     bool Change = false;
@@ -103,9 +89,7 @@ struct ObfuscationPassManager : public ModulePass {
     return Change;
   }
 
-  void add(Pass *P) {
-    Passes.push_back(P);
-  }
+  void add(Pass *P) { Passes.push_back(P); }
 
   bool run(Module &M) {
     bool Change = false;
@@ -132,9 +116,7 @@ struct ObfuscationPassManager : public ModulePass {
     return Changed;
   }
 
-  bool runModulePass(Module &M, ModulePass *P) {
-    return P->runOnModule(M);
-  }
+  bool runModulePass(Module &M, ModulePass *P) { return P->runOnModule(M); }
 
   static ObfuscationOptions *getOptions() {
     ObfuscationOptions *Options = new ObfuscationOptions{
@@ -143,8 +125,10 @@ struct ObfuscationPassManager : public ModulePass {
         new ObfOpt{EnableIndirectGV, LevelIndirectGV, "indgv"},
         new ObfOpt{EnableIRFlattening, 0, "fla"},
         new ObfOpt{EnableIRStringEncryption, 0, "cse"},
-        new ObfOpt{EnableIRConstantIntEncryption, LevelIRConstantIntEncryption, "cie"},
-        new ObfOpt{EnableIRConstantFPEncryption, LevelIRConstantFPEncryption, "cfe"}};
+        new ObfOpt{EnableIRConstantIntEncryption, LevelIRConstantIntEncryption,
+                   "cie"},
+        new ObfOpt{EnableIRConstantFPEncryption, LevelIRConstantFPEncryption,
+                   "cfe"}};
     return Options;
   }
 
@@ -152,7 +136,7 @@ struct ObfuscationPassManager : public ModulePass {
 
     if (EnableIndirectBr || EnableIndirectCall || EnableIndirectGV ||
         EnableIRFlattening || EnableIRStringEncryption ||
-      EnableIRConstantIntEncryption || EnableIRConstantFPEncryption) {
+        EnableIRConstantIntEncryption || EnableIRConstantFPEncryption) {
       EnableIRObfuscation = true;
     }
 
@@ -192,7 +176,7 @@ ModulePass *llvm::createObfuscationPassManager() {
 INITIALIZE_PASS_BEGIN(ObfuscationPassManager, "irobf", "Enable IR Obfuscation",
                       false, false)
 INITIALIZE_PASS_END(ObfuscationPassManager, "irobf", "Enable IR Obfuscation",
-                      false, false)
+                    false, false)
 
 //-----------------------------------------------------------------------------
 // New PM Registration
@@ -203,32 +187,35 @@ llvm::PassPluginLibraryInfo getObfPassPluginInfo() {
             PB.registerPipelineParsingCallback(
                 [](StringRef Name, ModulePassManager &FPM,
                    ArrayRef<PassBuilder::PipelineElement> InnerPipeline) {
-                    if (Name == EnableIRObfuscation.ArgStr) {
-                      EnableIRObfuscation = true;
-                      for (const auto &Element : InnerPipeline) {
-                        if (Element.Name == EnableIndirectBr.ArgStr) {
-                          EnableIndirectBr = true;
-                        } else if (Element.Name == EnableIndirectCall.ArgStr) {
-                          EnableIndirectCall = true;
-                        } else if (Element.Name == EnableIndirectGV.ArgStr) {
-                          EnableIndirectGV = true;
-                        } else if (Element.Name == EnableIRFlattening.ArgStr) {
-                          EnableIRFlattening = true;
-                        } else if (Element.Name == EnableIRObfuscation.ArgStr) {
-                          EnableIRObfuscation = true;
-                        } else if (Element.Name == EnableIRStringEncryption.ArgStr) {
-                          EnableIRStringEncryption = true;
-                        } else if (Element.Name == EnableIRConstantIntEncryption.ArgStr) {
-                          EnableIRConstantIntEncryption = true;
-                        } else if (Element.Name == EnableIRConstantFPEncryption.ArgStr) {
-                          EnableIRConstantFPEncryption = true;
-                        }
+                  if (Name == EnableIRObfuscation.ArgStr) {
+                    EnableIRObfuscation = true;
+                    for (const auto &Element : InnerPipeline) {
+                      if (Element.Name == EnableIndirectBr.ArgStr) {
+                        EnableIndirectBr = true;
+                      } else if (Element.Name == EnableIndirectCall.ArgStr) {
+                        EnableIndirectCall = true;
+                      } else if (Element.Name == EnableIndirectGV.ArgStr) {
+                        EnableIndirectGV = true;
+                      } else if (Element.Name == EnableIRFlattening.ArgStr) {
+                        EnableIRFlattening = true;
+                      } else if (Element.Name == EnableIRObfuscation.ArgStr) {
+                        EnableIRObfuscation = true;
+                      } else if (Element.Name ==
+                                 EnableIRStringEncryption.ArgStr) {
+                        EnableIRStringEncryption = true;
+                      } else if (Element.Name ==
+                                 EnableIRConstantIntEncryption.ArgStr) {
+                        EnableIRConstantIntEncryption = true;
+                      } else if (Element.Name ==
+                                 EnableIRConstantFPEncryption.ArgStr) {
+                        EnableIRConstantFPEncryption = true;
                       }
-
-                      FPM.addPass(ObfuscationPassManagerPass());
-                      return true;
                     }
-                    return false;
+
+                    FPM.addPass(ObfuscationPassManagerPass());
+                    return true;
+                  }
+                  return false;
                 });
           }};
 }

@@ -24,26 +24,27 @@ using namespace llvm;
 namespace {
 
 struct ConstantIntEncryption : public FunctionPass {
-  static char         ID;
+  static char ID;
   ObfuscationOptions *ArgsOptions;
-  CryptoUtils         RandomEngine;
+  CryptoUtils RandomEngine;
 
   ConstantIntEncryption(ObfuscationOptions *argsOptions) : FunctionPass(ID) {
     this->ArgsOptions = argsOptions;
   }
 
   Value *createConstantIntEncrypt0(BasicBlock::iterator ip, ConstantInt *CIT) {
-    const auto          Module = ip->getModule();
+    const auto Module = ip->getModule();
     IRBuilder<NoFolder> IRB(ip->getContext());
     IRB.SetInsertPoint(ip);
 
-    const auto Key = ConstantInt::get(CIT->getType(),
-                                      RandomEngine.get_uint64_t());
+    const auto Key =
+        ConstantInt::get(CIT->getType(), RandomEngine.get_uint64_t());
     const auto Enc = ConstantExpr::getSub(CIT, Key);
-    auto       GV = new GlobalVariable(*Module, Enc->getType(), false,
-                                       GlobalValue::LinkageTypes::PrivateLinkage,
-                                       Enc,
-                                       ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstIntEnc" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GV = new GlobalVariable(
+        *Module, Enc->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, Enc,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstIntEnc" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GV});
     // outs() << I << " ->\n";
     const auto Load = IRB.CreateLoad(Enc->getType(), GV);
@@ -52,28 +53,30 @@ struct ConstantIntEncryption : public FunctionPass {
   }
 
   Value *createConstantIntEncrypt1(BasicBlock::iterator ip, ConstantInt *CIT) {
-    const auto          Module = ip->getModule();
+    const auto Module = ip->getModule();
     IRBuilder<NoFolder> IRB(ip->getContext());
     IRB.SetInsertPoint(ip);
 
-    const auto Key = ConstantInt::get(CIT->getType(),
-                                      RandomEngine.get_uint64_t());
-    const auto XorKey = ConstantInt::get(CIT->getType(),
-                                         RandomEngine.get_uint64_t());
+    const auto Key =
+        ConstantInt::get(CIT->getType(), RandomEngine.get_uint64_t());
+    const auto XorKey =
+        ConstantInt::get(CIT->getType(), RandomEngine.get_uint64_t());
 
     auto Enc = ConstantExpr::getSub(CIT, Key);
     Enc = ConstantExpr::getXor(Enc, XorKey);
 
-    auto GV = new GlobalVariable(*Module, Enc->getType(), false,
-                                 GlobalValue::LinkageTypes::PrivateLinkage,
-                                 Enc,
-                                 ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstIntEnc" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GV = new GlobalVariable(
+        *Module, Enc->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, Enc,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstIntEnc" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GV});
 
-    auto GXorKey = new GlobalVariable(*Module, XorKey->getType(), false,
-                                      GlobalValue::LinkageTypes::PrivateLinkage,
-                                      XorKey,
-                                      ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstIntEncKey" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GXorKey = new GlobalVariable(
+        *Module, XorKey->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, XorKey,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstIntEncKey" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GXorKey});
 
     // outs() << I << " ->\n";
@@ -85,30 +88,32 @@ struct ConstantIntEncryption : public FunctionPass {
   }
 
   Value *createConstantIntEncrypt2(BasicBlock::iterator ip, ConstantInt *CIT) {
-    const auto          Module = ip->getModule();
+    const auto Module = ip->getModule();
     IRBuilder<NoFolder> IRB(ip->getContext());
     IRB.SetInsertPoint(ip);
 
-    const auto Key = ConstantInt::get(CIT->getType(),
-                                      RandomEngine.get_uint64_t());
-    const auto XorKey = ConstantInt::get(CIT->getType(),
-                                         RandomEngine.get_uint64_t());
+    const auto Key =
+        ConstantInt::get(CIT->getType(), RandomEngine.get_uint64_t());
+    const auto XorKey =
+        ConstantInt::get(CIT->getType(), RandomEngine.get_uint64_t());
 
     const auto MulXorKey = ConstantExpr::getMul(Key, XorKey);
 
     auto Enc = ConstantExpr::getSub(CIT, Key);
     Enc = ConstantExpr::getXor(Enc, MulXorKey);
 
-    auto GV = new GlobalVariable(*Module, Enc->getType(), false,
-                                 GlobalValue::LinkageTypes::PrivateLinkage,
-                                 Enc,
-                                 ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstIntEnc" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GV = new GlobalVariable(
+        *Module, Enc->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, Enc,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstIntEnc" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GV});
 
-    auto GXorKey = new GlobalVariable(*Module, XorKey->getType(), false,
-                                      GlobalValue::LinkageTypes::PrivateLinkage,
-                                      XorKey,
-                                      ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstIntEncKey" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GXorKey = new GlobalVariable(
+        *Module, XorKey->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, XorKey,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstIntEncKey" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GXorKey});
 
     // outs() << I << " ->\n";
@@ -121,14 +126,13 @@ struct ConstantIntEncryption : public FunctionPass {
   }
 
   Value *createConstantIntEncrypt3(BasicBlock::iterator ip, ConstantInt *CIT) {
-    const auto          Module = ip->getModule();
+    const auto Module = ip->getModule();
     IRBuilder<NoFolder> IRB(ip->getContext());
     IRB.SetInsertPoint(ip);
 
-    const auto Key = ConstantInt::get(CIT->getType(),
-                                      RandomEngine.get_uint64_t());
-    auto XorKey = ConstantInt::get(CIT->getType(),
-                                         RandomEngine.get_uint64_t());
+    const auto Key =
+        ConstantInt::get(CIT->getType(), RandomEngine.get_uint64_t());
+    auto XorKey = ConstantInt::get(CIT->getType(), RandomEngine.get_uint64_t());
 
     const auto MulXorKey = ConstantExpr::getMul(Key, XorKey);
 
@@ -139,16 +143,18 @@ struct ConstantIntEncryption : public FunctionPass {
     XorKey = ConstantExpr::getXor(XorKey, Enc);
     XorKey = ConstantExpr::getNeg(XorKey);
 
-    auto GV = new GlobalVariable(*Module, Enc->getType(), false,
-                                 GlobalValue::LinkageTypes::PrivateLinkage,
-                                 Enc,
-                                 ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstIntEnc" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GV = new GlobalVariable(
+        *Module, Enc->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, Enc,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstIntEnc" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GV});
 
-    auto GXorKey = new GlobalVariable(*Module, XorKey->getType(), false,
-                                      GlobalValue::LinkageTypes::PrivateLinkage,
-                                      XorKey,
-                                      ip->getFunction()->getName().str() + ip->getParent()->getName().str() + "_ConstIntEncKey" + std::to_string(RandomEngine.get_uint64_t()));
+    auto GXorKey = new GlobalVariable(
+        *Module, XorKey->getType(), false,
+        GlobalValue::LinkageTypes::PrivateLinkage, XorKey,
+        ip->getFunction()->getName().str() + ip->getParent()->getName().str() +
+            "_ConstIntEncKey" + std::to_string(RandomEngine.get_uint64_t()));
     appendToCompilerUsed(*Module, {GXorKey});
 
     // outs() << I << " ->\n";
@@ -181,9 +187,8 @@ struct ConstantIntEncryption : public FunctionPass {
         auto CI = dyn_cast<CallInst>(&I);
         auto GEP = dyn_cast<GetElementPtrInst>(&I);
         auto IsPhi = isa<PHINode>(&I);
-        auto InsertPt = IsPhi
-                          ? F.getEntryBlock().getFirstInsertionPt()
-                          : I.getIterator();
+        auto InsertPt =
+            IsPhi ? F.getEntryBlock().getFirstInsertionPt() : I.getIterator();
 
         for (unsigned i = 0; i < I.getNumOperands(); ++i) {
           if (CI && CI->isBundleOperand(i)) {
@@ -210,18 +215,17 @@ struct ConstantIntEncryption : public FunctionPass {
             Changed = true;
           }
         }
-
       }
     }
     return Changed;
   }
 };
-} // namespace llvm
+} // namespace
 
 char ConstantIntEncryption::ID = 0;
 
-FunctionPass *llvm::createConstantIntEncryptionPass(
-    ObfuscationOptions *argsOptions) {
+FunctionPass *
+llvm::createConstantIntEncryptionPass(ObfuscationOptions *argsOptions) {
   return new ConstantIntEncryption(argsOptions);
 }
 

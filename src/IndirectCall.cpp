@@ -7,7 +7,6 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 #include "llvm/IR/Module.h"
-
 #include <random>
 
 #define DEBUG_TYPE "icall"
@@ -24,7 +23,8 @@ struct IndirectCall : public FunctionPass {
   std::vector<Function *> Callees;
   CryptoUtils RandomEngine;
 
-  IndirectCall(unsigned pointerSize, ObfuscationOptions *argsOptions) : FunctionPass(ID) {
+  IndirectCall(unsigned pointerSize, ObfuscationOptions *argsOptions)
+      : FunctionPass(ID) {
     this->pointerSize = pointerSize;
     this->ArgsOptions = argsOptions;
   }
@@ -32,8 +32,8 @@ struct IndirectCall : public FunctionPass {
   StringRef getPassName() const override { return {"IndirectCall"}; }
 
   void NumberCallees(Function &F) {
-    for (auto &BB:F) {
-      for (auto &I:BB) {
+    for (auto &BB : F) {
+      for (auto &I : BB) {
         if (dyn_cast<CallInst>(&I)) {
           CallBase *CB = dyn_cast<CallBase>(&I);
           Function *Callee = CB->getCalledFunction();
@@ -43,7 +43,7 @@ struct IndirectCall : public FunctionPass {
           if (Callee->isIntrinsic()) {
             continue;
           }
-          CallSites.push_back((CallInst *) &I);
+          CallSites.push_back((CallInst *)&I);
           if (CalleeNumbering.count(Callee) == 0) {
             CalleeNumbering[Callee] = 0;
             Callees.push_back(Callee);
@@ -56,7 +56,7 @@ struct IndirectCall : public FunctionPass {
     std::default_random_engine e(seed);
     std::shuffle(Callees.begin(), Callees.end(), e);
     unsigned N = 0;
-    for (auto Callee:Callees) {
+    for (auto Callee : Callees) {
       CalleeNumbering[Callee] = N++;
     }
   }
@@ -69,23 +69,26 @@ struct IndirectCall : public FunctionPass {
 
     // callee's address
     std::vector<Constant *> Elements;
-    for (auto Callee:Callees) {
+    for (auto Callee : Callees) {
       Constant *CE = ConstantExpr::getBitCast(
           Callee, PointerType::getUnqual(F.getContext()));
-      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, EncKey);
+      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE,
+                                          EncKey);
       Elements.push_back(CE);
     }
 
     ArrayType *ATy =
         ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
     Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
-    GV = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
-                                               CA, GVName);
+    GV = new GlobalVariable(*F.getParent(), ATy, false,
+                            GlobalValue::LinkageTypes::PrivateLinkage, CA,
+                            GVName);
     appendToCompilerUsed(*F.getParent(), {GV});
     return GV;
   }
 
-  GlobalVariable *getIndirectCallees1(Function &F, ConstantInt *AddKey, ConstantInt *XorKey) const {
+  GlobalVariable *getIndirectCallees1(Function &F, ConstantInt *AddKey,
+                                      ConstantInt *XorKey) const {
     std::string GVName(F.getName().str() + "_IndirectCallees1");
     GlobalVariable *GV = F.getParent()->getNamedGlobal(GVName);
     if (GV)
@@ -93,30 +96,32 @@ struct IndirectCall : public FunctionPass {
 
     // callee's address
     std::vector<Constant *> Elements;
-    for (auto Callee:Callees) {
+    for (auto Callee : Callees) {
       Constant *CE = ConstantExpr::getBitCast(
-        Callee, PointerType::getUnqual(F.getContext()));
-      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, ConstantExpr::getXor(AddKey, XorKey));
+          Callee, PointerType::getUnqual(F.getContext()));
+      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE,
+                                          ConstantExpr::getXor(AddKey, XorKey));
       Elements.push_back(CE);
     }
 
     ArrayType *ATy =
-      ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
+        ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
     Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
-    GV = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
-      CA, GVName);
+    GV = new GlobalVariable(*F.getParent(), ATy, false,
+                            GlobalValue::LinkageTypes::PrivateLinkage, CA,
+                            GVName);
     appendToCompilerUsed(*F.getParent(), {GV});
     return GV;
   }
 
-  GlobalVariable * getIndirectCallees2(Function &F, ConstantInt *AddKey, ConstantInt *XorKey) {
+  GlobalVariable *getIndirectCallees2(Function &F, ConstantInt *AddKey,
+                                      ConstantInt *XorKey) {
     std::string GVName(F.getName().str() + "_IndirectCallees2");
     GlobalVariable *GV = F.getParent()->getNamedGlobal(GVName);
     if (GV)
       return GV;
 
-
-    auto& Ctx = F.getContext();
+    auto &Ctx = F.getContext();
     IntegerType *intType = Type::getInt32Ty(Ctx);
     if (pointerSize == 8) {
       intType = Type::getInt64Ty(Ctx);
@@ -124,24 +129,32 @@ struct IndirectCall : public FunctionPass {
 
     // callee's address
     std::vector<Constant *> Elements;
-    for (auto Callee:Callees) {
+    for (auto Callee : Callees) {
       Constant *CE = ConstantExpr::getBitCast(
-        Callee, PointerType::getUnqual(F.getContext()));
-      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, ConstantExpr::getXor(AddKey, ConstantExpr::getMul(XorKey, ConstantInt::get(intType, CalleeNumbering[Callee], false))));
+          Callee, PointerType::getUnqual(F.getContext()));
+      CE = ConstantExpr::getGetElementPtr(
+          Type::getInt8Ty(F.getContext()), CE,
+          ConstantExpr::getXor(
+              AddKey,
+              ConstantExpr::getMul(
+                  XorKey,
+                  ConstantInt::get(intType, CalleeNumbering[Callee], false))));
       Elements.push_back(CE);
     }
 
     ArrayType *ATy =
-      ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
+        ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
     Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
-    GV = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
-      CA, GVName);
+    GV = new GlobalVariable(*F.getParent(), ATy, false,
+                            GlobalValue::LinkageTypes::PrivateLinkage, CA,
+                            GVName);
     appendToCompilerUsed(*F.getParent(), {GV});
 
     return GV;
   }
 
-  std::pair<GlobalVariable *, GlobalVariable *> getIndirectCallees3(Function &F, ConstantInt *AddKey) {
+  std::pair<GlobalVariable *, GlobalVariable *>
+  getIndirectCallees3(Function &F, ConstantInt *AddKey) {
     std::string GVNameAdd(F.getName().str() + "_IndirectCallees3_Add");
     std::string GVNameXor(F.getName().str() + "_IndirectCallees3_Xor");
     GlobalVariable *GVAdd = F.getParent()->getNamedGlobal(GVNameAdd);
@@ -149,8 +162,7 @@ struct IndirectCall : public FunctionPass {
     if (GVAdd && GVXor)
       return std::make_pair(GVAdd, GVXor);
 
-
-    auto& Ctx = F.getContext();
+    auto &Ctx = F.getContext();
     IntegerType *intType = Type::getInt32Ty(Ctx);
     if (pointerSize == 8) {
       intType = Type::getInt64Ty(Ctx);
@@ -159,13 +171,19 @@ struct IndirectCall : public FunctionPass {
     // callee's address
     std::vector<Constant *> Elements;
     std::vector<Constant *> XorKeys;
-    for (auto Callee:Callees) {
+    for (auto Callee : Callees) {
       uint64_t V = RandomEngine.get_uint64_t();
       Constant *XorKey = ConstantInt::get(intType, V, false);
 
       Constant *CE = ConstantExpr::getBitCast(
-        Callee, PointerType::getUnqual(F.getContext()));
-      CE = ConstantExpr::getGetElementPtr(Type::getInt8Ty(F.getContext()), CE, ConstantExpr::getXor(AddKey, ConstantExpr::getMul(XorKey, ConstantInt::get(intType, CalleeNumbering[Callee], false))));
+          Callee, PointerType::getUnqual(F.getContext()));
+      CE = ConstantExpr::getGetElementPtr(
+          Type::getInt8Ty(F.getContext()), CE,
+          ConstantExpr::getXor(
+              AddKey,
+              ConstantExpr::getMul(
+                  XorKey,
+                  ConstantInt::get(intType, CalleeNumbering[Callee], false))));
 
       XorKey = ConstantExpr::getNeg(XorKey);
       XorKey = ConstantExpr::getXor(XorKey, AddKey);
@@ -175,15 +193,18 @@ struct IndirectCall : public FunctionPass {
     }
 
     ArrayType *ATy =
-      ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
+        ArrayType::get(PointerType::getUnqual(F.getContext()), Elements.size());
     Constant *CA = ConstantArray::get(ATy, ArrayRef<Constant *>(Elements));
-    GVAdd = new GlobalVariable(*F.getParent(), ATy, false, GlobalValue::LinkageTypes::PrivateLinkage,
-      CA, GVNameAdd);
+    GVAdd = new GlobalVariable(*F.getParent(), ATy, false,
+                               GlobalValue::LinkageTypes::PrivateLinkage, CA,
+                               GVNameAdd);
     appendToCompilerUsed(*F.getParent(), {GVAdd});
 
     ArrayType *XTy = ArrayType::get(intType, XorKeys.size());
     Constant *CX = ConstantArray::get(XTy, XorKeys);
-    GVXor = new GlobalVariable(*F.getParent(), XTy, false, GlobalValue::LinkageTypes::PrivateLinkage, CX, GVNameXor);
+    GVXor = new GlobalVariable(*F.getParent(), XTy, false,
+                               GlobalValue::LinkageTypes::PrivateLinkage, CX,
+                               GVNameXor);
     appendToCompilerUsed(*F.getParent(), {GVXor});
 
     return std::make_pair(GVAdd, GVXor);
@@ -226,8 +247,9 @@ struct IndirectCall : public FunctionPass {
       Targets = getIndirectCallees0(Fn, EncKey1);
     } else if (opt.level() == 1 || opt.level() == 2) {
       ConstantInt *CXK = ConstantInt::get(intType, XV, false);
-      GXorKey = new GlobalVariable(*Fn.getParent(), CXK->getType(), false, GlobalValue::LinkageTypes::PrivateLinkage,
-        CXK, Fn.getName() + "_ICallXorKey");
+      GXorKey = new GlobalVariable(*Fn.getParent(), CXK->getType(), false,
+                                   GlobalValue::LinkageTypes::PrivateLinkage,
+                                   CXK, Fn.getName() + "_ICallXorKey");
       appendToCompilerUsed(*Fn.getParent(), {GXorKey});
 
       if (opt.level() == 1) {
@@ -249,13 +271,10 @@ struct IndirectCall : public FunctionPass {
       FunctionType *FTy = Callee->getFunctionType();
       IRBuilder<> IRB(CB);
 
-      Value *Idx = ConstantInt::get(intType, CalleeNumbering[CB->getCalledFunction()]);
-      Value *GEP = IRB.CreateGEP(
-          Targets->getValueType(), Targets,
-          {Zero, Idx});
-      Value *EncDestAddr = IRB.CreateLoad(
-          GEP->getType(), GEP,
-          CI->getName());
+      Value *Idx =
+          ConstantInt::get(intType, CalleeNumbering[CB->getCalledFunction()]);
+      Value *GEP = IRB.CreateGEP(Targets->getValueType(), Targets, {Zero, Idx});
+      Value *EncDestAddr = IRB.CreateLoad(GEP->getType(), GEP, CI->getName());
 
       Value *DecKey = EncKey;
 
@@ -272,7 +291,8 @@ struct IndirectCall : public FunctionPass {
       }
 
       if (XorKeys) {
-        Value *XorKeysGEP = IRB.CreateGEP(XorKeys->getValueType(), XorKeys, {Zero, Idx});
+        Value *XorKeysGEP =
+            IRB.CreateGEP(XorKeys->getValueType(), XorKeys, {Zero, Idx});
 
         Value *XorKey = IRB.CreateLoad(intType, XorKeysGEP);
 
@@ -284,8 +304,8 @@ struct IndirectCall : public FunctionPass {
         DecKey = IRB.CreateNeg(DecKey);
       }
 
-      Value *DestAddr = IRB.CreateGEP(Type::getInt8Ty(Ctx),
-          EncDestAddr, DecKey);
+      Value *DestAddr =
+          IRB.CreateGEP(Type::getInt8Ty(Ctx), EncDestAddr, DecKey);
 
       Value *FnPtr = IRB.CreateBitCast(DestAddr, FTy->getPointerTo());
       FnPtr->setName("Call_" + Callee->getName());
@@ -294,13 +314,14 @@ struct IndirectCall : public FunctionPass {
 
     return true;
   }
-
 };
-} // namespace llvm
+} // namespace
 
 char IndirectCall::ID = 0;
-FunctionPass *llvm::createIndirectCallPass(unsigned pointerSize, ObfuscationOptions *argsOptions) {
+FunctionPass *llvm::createIndirectCallPass(unsigned pointerSize,
+                                           ObfuscationOptions *argsOptions) {
   return new IndirectCall(pointerSize, argsOptions);
 }
 
-INITIALIZE_PASS(IndirectCall, "icall", "Enable IR Indirect Call Obfuscation", false, false)
+INITIALIZE_PASS(IndirectCall, "icall", "Enable IR Indirect Call Obfuscation",
+                false, false)

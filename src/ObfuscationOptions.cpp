@@ -15,8 +15,8 @@ namespace llvm {
 SmallVector<std::string> readAnnotate(Function *f) {
   SmallVector<std::string> annotations;
 
-  auto *Annotations = f->getParent()->getGlobalVariable(
-      "llvm.global.annotations");
+  auto *Annotations =
+      f->getParent()->getGlobalVariable("llvm.global.annotations");
   auto *C = dyn_cast_or_null<Constant>(Annotations);
   if (!C || C->getNumOperands() != 1)
     return annotations;
@@ -49,7 +49,7 @@ ObfOpt ObfuscationOptions::toObfuscate(const ObfOpt *option, Function *f) {
   const auto attrEnable = "+" + option->attributeName();
   const auto attrDisable = "-" + option->attributeName();
   const auto attrLevel = "^" + option->attributeName();
-  ObfOpt     result = option->none();
+  ObfOpt result = option->none();
   if (f->isDeclaration()) {
     return result;
   }
@@ -62,7 +62,7 @@ ObfOpt ObfuscationOptions::toObfuscate(const ObfOpt *option, Function *f) {
   bool annotationDisableFound = false;
 
   auto annotations = readAnnotate(f);
-  int  levelSet = 0;
+  int levelSet = 0;
   if (!annotations.empty()) {
     for (const auto &annotation : annotations) {
       if (annotation.find(attrDisable) != std::string::npos) {
@@ -74,22 +74,20 @@ ObfOpt ObfuscationOptions::toObfuscate(const ObfOpt *option, Function *f) {
         annotationEnableFound = true;
       }
       if (const auto levelPos = annotation.find(attrLevel);
-        levelPos != std::string::npos) {
+          levelPos != std::string::npos) {
         if (annotation.find(attrLevel, levelPos + 1) != std::string::npos) {
           f->getContext().diagnose(DiagnosticInfoUnsupported{
-              *f,
-              f->getName() + " has multiple annotations for setting " + result.
-              attributeName() +
-              " factors, What are you the fucking want to do?"});
+              *f, f->getName() + " has multiple annotations for setting " +
+                      result.attributeName() +
+                      " factors, What are you the fucking want to do?"});
           return result.none();
         }
-        int32_t    level = -1;
+        int32_t level = -1;
         const auto equalPos = annotation.find('=', levelPos + 1);
         if (equalPos == std::string::npos) {
           f->getContext().diagnose(DiagnosticInfoUnsupported{
-              *f,
-              f->getName() + ": " + annotation +
-              " missing equal sign, sample: " + attrLevel + " = 0"});
+              *f, f->getName() + ": " + annotation +
+                      " missing equal sign, sample: " + attrLevel + " = 0"});
           return result.none();
         }
 
@@ -98,9 +96,8 @@ ObfOpt ObfuscationOptions::toObfuscate(const ObfOpt *option, Function *f) {
             continue;
           }
           f->getContext().diagnose(DiagnosticInfoUnsupported{
-              *f,
-              f->getName() + ": " + annotation +
-              " unexpected characters, sample: " + attrLevel + " = 0"});
+              *f, f->getName() + ": " + annotation +
+                      " unexpected characters, sample: " + attrLevel + " = 0"});
           return result.none();
         }
 
@@ -111,18 +108,17 @@ ObfOpt ObfuscationOptions::toObfuscate(const ObfOpt *option, Function *f) {
           level = annotation[i] - '0';
           if (level < 0 || level > 9) {
             f->getContext().diagnose(DiagnosticInfoUnsupported{
-              *f,
-              f->getName() + ": " + annotation +
-              " unexpected character: " + std::string{annotation[i]} + ", sample: " + attrLevel + " = 0"});
+                *f, f->getName() + ": " + annotation +
+                        " unexpected character: " + std::string{annotation[i]} +
+                        ", sample: " + attrLevel + " = 0"});
             return result.none();
           }
           break;
         }
         if (level == -1) {
           f->getContext().diagnose(DiagnosticInfoUnsupported{
-              *f,
-              f->getName() + ": " + annotation +
-              " level value not found, sample: " + attrLevel + " = 0"});
+              *f, f->getName() + ": " + annotation +
+                      " level value not found, sample: " + attrLevel + " = 0"});
           return result.none();
         }
 
@@ -134,17 +130,16 @@ ObfOpt ObfuscationOptions::toObfuscate(const ObfOpt *option, Function *f) {
 
   if (annotationDisableFound && annotationEnableFound) {
     f->getContext().diagnose(DiagnosticInfoUnsupported{
-        *f,
-        f->getName() +
-        " having both enable annotation and disable annotation, What are you the fucking want to do?"});
+        *f, f->getName() + " having both enable annotation and disable "
+                           "annotation, What are you the fucking want to do?"});
     return result.none();
   }
 
   if (levelSet > 1) {
     f->getContext().diagnose(DiagnosticInfoUnsupported{
-        *f,
-        f->getName() + " has multiple annotations for setting " + result.
-        attributeName() + " factors, What are you the fucking want to do?"});
+        *f, f->getName() + " has multiple annotations for setting " +
+                result.attributeName() +
+                " factors, What are you the fucking want to do?"});
     return result.none();
   }
 
@@ -157,5 +152,4 @@ ObfOpt ObfuscationOptions::toObfuscate(const ObfOpt *option, Function *f) {
   return result;
 }
 
-
-}
+} // namespace llvm

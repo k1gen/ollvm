@@ -1,5 +1,6 @@
 build
 /result
-.vscode
-/.vs
-/ollvm-pass/.vs
+.envrc
+/.direnv
+/.cache
+/.clang-format

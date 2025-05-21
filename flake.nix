@@ -1,5 +1,5 @@
 {
-  description = "Nix flake for building the ollvm LLVM obfuscation pass";
+  description = "Nix flake for building the OLLVM obfuscation pass";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -20,7 +20,9 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
-        llvm = pkgs.llvmPackages_20.llvm;
+
+        llvm = pkgs.llvmPackages_20;
+
         rust = pkgs.rust-bin.selectLatestNightlyWith (
           tc:
           tc.default.override {
@@ -31,6 +33,14 @@
             targets = [ "x86_64-unknown-linux-gnu" ];
           }
         );
+
+        rustLibDir = "${rust}/lib";
+        rustSoname =
+          let
+            files = builtins.attrNames (builtins.readDir rustLibDir);
+            matches = builtins.filter (n: builtins.match "^libLLVM\\.so[0-9\\.]*-rust-.*" n != null) files;
+          in
+          (builtins.head matches);
       in
       {
         packages.ollvm = pkgs.stdenv.mkDerivation {
@@ -43,35 +53,51 @@
             ninja
           ];
           buildInputs = [
-            llvm
+            llvm.llvm
             rust
           ];
 
-          configurePhase = ''
-            cmake -G Ninja -B build \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DLLVM_DIR=${llvm}/lib/cmake/llvm \
-              -DLLVM_EXPORT_SYMBOLS_FOR_PLUGINS=ON \
-              -DBUILD_SHARED_LIBS=ON \
-              -DLLVM_LINK_LLVM_DYLIB=ON \
-              -DCMAKE_CXX_FLAGS="-Wall -fno-rtti -O3 -march=x86-64-v3 -flto" \
-              -DCMAKE_SHARED_LINKER_FLAGS="-L${rust}/lib -Wl,-rpath,${rust}/lib -l:libLLVM.so.20.1-rust-1.89.0-nightly"
-          '';
-
-          buildPhase = ''
-            ninja -C build
-          '';
-
-          installPhase = ''
-            mkdir -p $out/lib
-            cp build/ollvm.so $out/lib/
-          '';
+          cmakeGenerator = "Ninja";
+          cmakeBuildDir = "build";
+          cmakeBuildType = "Release";
+          cmakeFlags = [
+            "-DLLVM_DIR=${llvm.llvm}/lib/cmake/llvm"
+            "-DRUST_LIB_DIR=${rustLibDir}"
+            "-DRUST_SONAME=${rustSoname}"
+          ];
 
           meta = with pkgs.lib; {
             description = "OLLVM: LLVM Obfuscation Pass";
             maintainers = with maintainers; [ olk ];
           };
         };
+
+        devShells.default = pkgs.mkShell {
+          name = "ollvm-dev";
+          nativeBuildInputs = with pkgs; [
+            cmake
+            ninja
+          ];
+          buildInputs = [
+            llvm.llvm
+            llvm.clang-tools
+            rust
+          ];
+
+          shellHook = ''
+            if [ ! -d build ]; then
+              cmake -G Ninja -S . -B build \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DLLVM_DIR=${llvm.llvm}/lib/cmake/llvm \
+                -DRUST_LIB_DIR=${rustLibDir} \
+                -DRUST_SONAME=${rustSoname}
+            fi
+
+            export C_INCLUDE_PATH=${llvm.llvm}/include:$C_INCLUDE_PATH
+            export CPLUS_INCLUDE_PATH=${llvm.llvm}/include/c++/v1:${llvm.llvm}/include:$CPLUS_INCLUDE_PATH
+          '';
+        };
+
         defaultPackage = self.packages.${system}.ollvm;
       }
     );

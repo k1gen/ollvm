@@ -1,17 +1,3 @@
-//===- LowerSwitch.cpp - Eliminate Switch instructions --------------------===//
-//
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
-//===----------------------------------------------------------------------===//
-//
-// The LowerSwitch transformation rewrites switch instructions with a sequence
-// of branches, which allows targets to get away with not implementing the
-// switch instruction until it is convenient.
-//
-//===----------------------------------------------------------------------===//
 #include "include/LegacyLowerSwitch.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
@@ -180,9 +166,8 @@ static raw_ostream &operator<<(raw_ostream &O,
 /// number of phi values equal to the number of branches to SuccBB.
 static void fixPhis(BasicBlock *SuccBB, BasicBlock *OrigBB, BasicBlock *NewBB,
                     unsigned NumMergedCases) {
-  for (BasicBlock::iterator I = SuccBB->begin(),
-                            IE = SuccBB->getFirstNonPHI()->getIterator();
-       I != IE; ++I) {
+  for (auto I = SuccBB->begin(), IE = SuccBB->getFirstInsertionPt(); I != IE;
+       ++I) {
     PHINode *PN = cast<PHINode>(I);
 
     // Only update the first occurrence.

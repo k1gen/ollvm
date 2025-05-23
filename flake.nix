@@ -1,5 +1,5 @@
 {
-  description = "Nix flake for building the OLLVM obfuscation pass";
+  description = "Nix flake for building the OLLVM obfuscation pass for use with Rust";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -22,6 +22,9 @@
         pkgs = import nixpkgs { inherit system overlays; };
 
         llvm = pkgs.llvmPackages_20;
+        llvmDev = llvm.llvm.dev;
+
+        stdenv = pkgs.stdenvAdapters.useMoldLinker pkgs.fastStdenv;
 
         rust = pkgs.rust-bin.selectLatestNightlyWith (
           tc:
@@ -43,7 +46,7 @@
           (builtins.head matches);
       in
       {
-        packages.ollvm = pkgs.stdenv.mkDerivation {
+        packages.ollvm = stdenv.mkDerivation {
           pname = "ollvm";
           version = "0.1.0";
           src = ./.;
@@ -51,35 +54,28 @@
           nativeBuildInputs = with pkgs; [
             cmake
             ninja
+            llvmDev
           ];
-          buildInputs = [
-            llvm.llvm
-            rust
-          ];
+          buildInputs = [ rust ];
 
           cmakeGenerator = "Ninja";
           cmakeBuildDir = "build";
           cmakeBuildType = "Release";
           cmakeFlags = [
-            "-DLLVM_DIR=${llvm.llvm}/lib/cmake/llvm"
+            "-DLLVM_DIR=${llvmDev}"
             "-DRUST_LIB_DIR=${rustLibDir}"
             "-DRUST_SONAME=${rustSoname}"
           ];
-
-          meta = with pkgs.lib; {
-            description = "OLLVM: LLVM Obfuscation Pass";
-            maintainers = with maintainers; [ olk ];
-          };
         };
 
-        devShells.default = pkgs.mkShell {
+        devShells.default = pkgs.mkShell.override { stdenv = stdenv; } {
           name = "ollvm-dev";
           nativeBuildInputs = with pkgs; [
             cmake
             ninja
+            llvmDev
           ];
           buildInputs = [
-            llvm.llvm
             llvm.clang-tools
             rust
           ];
@@ -88,13 +84,12 @@
             if [ ! -d build ]; then
               cmake -G Ninja -S . -B build \
                 -DCMAKE_BUILD_TYPE=Debug \
-                -DLLVM_DIR=${llvm.llvm}/lib/cmake/llvm \
+                -DLLVM_DIR=${llvmDev} \
                 -DRUST_LIB_DIR=${rustLibDir} \
                 -DRUST_SONAME=${rustSoname}
             fi
 
-            export C_INCLUDE_PATH=${llvm.llvm}/include:$C_INCLUDE_PATH
-            export CPLUS_INCLUDE_PATH=${llvm.llvm}/include/c++/v1:${llvm.llvm}/include:$CPLUS_INCLUDE_PATH
+            export C_INCLUDE_PATH=${llvmDev}/include:$C_INCLUDE_PATH
           '';
         };
 

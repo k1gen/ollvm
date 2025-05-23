@@ -268,7 +268,6 @@ struct IndirectCall : public FunctionPass {
       CallBase *CB = CI;
 
       Function *Callee = CB->getCalledFunction();
-      FunctionType *FTy = Callee->getFunctionType();
       IRBuilder<> IRB(CB);
 
       Value *Idx =
@@ -307,7 +306,7 @@ struct IndirectCall : public FunctionPass {
       Value *DestAddr =
           IRB.CreateGEP(Type::getInt8Ty(Ctx), EncDestAddr, DecKey);
 
-      Value *FnPtr = IRB.CreateBitCast(DestAddr, FTy->getPointerTo());
+      Value *FnPtr = IRB.CreateBitCast(DestAddr, Callee->getType());
       FnPtr->setName("Call_" + Callee->getName());
       CB->setCalledOperand(FnPtr);
     }

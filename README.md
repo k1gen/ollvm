@@ -1,30 +1,46 @@
-# ollvm
+# ollvm for Linux, made for use with latest nightly Rust toolchains
 
-## Build
+Currently, all obfuscation techniques work except for Control-flow flattening, which makes rustc crash horribly.
 
-1. Clone https://github.com/rust-lang/llvm-project/tree/rustc/20.1-2025-02-13 and cd into it: `git clone git@github.com:rust-lang/llvm-project.git -b rustc/20.1-2025-02-13 --depth 1 && cd llvm-project`
-2. Create build directory beside llvm folder: `mkdir build && cd build`
-3. Generate ninja build files with the following command: `cmake -G Ninja ../llvm -DCMAKE_INSTALL_PREFIX=/workspace/ollvm/llvm_x64 -DCMAKE_CXX_STANDARD=17 -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_EXPORT_SYMBOLS_FOR_PLUGINS=ON -DLLVM_ENABLE_BACKTRACES=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_TOOLS=OFF -DLLVM_INSTALL_UTILS=OFF`
-4. Build and install llvm: `ninja -j"$(nproc)" install`
-5. Cd into the ollvm-pass directory and create the build directory there: `cd ../../ollvm-pass && mkdir build && cd build`
-6. Build the ollvm pass plugin: `cmake -G Ninja .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DLLVM_DIR=<...>/llvm_x64/lib/cmake/llvm -DCMAKE_CXX_FLAGS_RELEASE="-O3 -march=x86-64-v3 -flto" -DCMAKE_SHARED_LINKER_FLAGS="-s" && ninja`
+The techniques listed below work, as well as any combination of them (`irobf(irobf-indbr,irobf-icall,irobf-indgv,irobf-cse,irobf-cie,irobf-cfe)` gives you a ~313% size increase):
 
-or just run `nix build`
+- Indirect Call Obfuscation (`irobf-icall`, makes the final executable ~40% larger)
+- Indirect Branch Obfuscation (`irobf-indbr`, final executable roughly twice as large)
+- Indirect Global Variable Obfuscation (`irobf-indgv`, ~4% size increase)
+- Constant String Encryption (`irobf-cse`, doesn't really encrypt anything for now, but the target compiles successfully)
+- Constant Integer Encryption (`irobf-cie`, ~55% size increase, usefulness questionable)
+- Constant FP Encryption (`irobf-cfe`, no size difference)
+
+The project is in WIP state, and because my LLVM and C++ skills are not the best, I can't guarantee that it will ever be fully functional.
+Next to come is cross-platform support, Control-flow flattening after that, then maybe a fix for the String Encryption. No promises, though.
+
+## Disclaimer
+
+<...>
+
+## Building
+
+```
+nix build
+```
+
+Really. I put a lot of effort into making this as painless as possible.
 
 ## Usage
 
-1. Put libollvm.so inside your cargo (where Cargo.toml is located).
-2. Add this to your Cargo.toml (nightly only):
+1. Put result/lib/ollvm.so somewhere close to the project you want to use it with, e.g. in the root of your project.
+2. Add this to your Cargo.toml (nightly toolchains only):
 
 ```
 cargo-features = ["profile-rustflags"]
 rustflags = [
-    "-Zllvm-plugins=libollvm.so",
+    "-Zllvm-plugins=<path-to-ollvm.so>",
     "-Cpasses=irobf(irobf-indbr,irobf-icall,irobf-indgv,irobf-cff,irobf-cse,irobf-cie,irobf-cfe)",
 ]
 ```
 
-## References
+## References and Credits
 
 [https://github.com/0xlane/ollvm-rust]
+
 [https://github.com/KomiMoe/Arkari]

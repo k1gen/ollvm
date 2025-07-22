@@ -1,6 +1,5 @@
 build
-/result
+result
 .envrc
-/.direnv
-/.cache
-/.clang-format
+.direnv
+.cache

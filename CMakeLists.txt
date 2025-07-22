@@ -18,12 +18,16 @@ add_compile_options(
   -fno-rtti
   -fno-exceptions
 )
+add_link_options(
+  -static-libstdc++
+  -static-libgcc
+)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(LLVM 20.1 REQUIRED CONFIG)
+find_package(LLVM REQUIRED CONFIG)
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 include(AddLLVM)
 
@@ -82,4 +86,3 @@ target_include_directories(ollvm PUBLIC
   ${LLVM_INCLUDE_DIRS}
 )
 target_compile_definitions(ollvm PRIVATE ${LLVM_DEFINITIONS})
-target_link_options(ollvm PRIVATE -static-libstdc++ -static-libgcc)

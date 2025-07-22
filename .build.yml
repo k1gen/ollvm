@@ -1,0 +1,11 @@
+image: alpine/edge
+secrets:
+  - ae842f30-a65a-478d-b151-acf81831b55a
+sources:
+  - git+ssh://git@git.sr.ht/~olk/ollvm
+tasks:
+  - mirror-to-github: |
+      cd ~/ollvm
+      ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+      git remote add github git@github.com:k1gen/ollvm.git
+      git push --mirror github
